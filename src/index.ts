@@ -81,7 +81,7 @@ const allTools = [
   },
   {
     name: 'gemini_generate_image',
-    description: "Generate images using Google's Gemini 2.5 Flash native image generation, supports multiple input images for variations. For transparency conversion, generate with solid white background (or black for dark objects/snowy scenes). The transparency converter uses color tolerance, so backgrounds close to pure white/black will be made transparent.",
+    description: "Generate images using Google's Gemini native image generation (supports 2.5 Flash and 3 Pro models), supports multiple input images for variations. For transparency conversion, generate with solid white background (or black for dark objects/snowy scenes). The transparency converter uses color tolerance, so backgrounds close to pure white/black will be made transparent.",
     inputSchema: {
       type: 'object',
       properties: {
@@ -100,7 +100,8 @@ const allTools = [
         },
         model: {
           type: 'string',
-          description: 'Gemini model to use (default: gemini-2.5-flash-image)',
+          enum: ['gemini-2.5-flash-image', 'gemini-3-pro-image-preview'],
+          description: 'Gemini model to use (default: gemini-3-pro-image-preview)',
         },
       },
       required: ['prompt', 'outputPath'],

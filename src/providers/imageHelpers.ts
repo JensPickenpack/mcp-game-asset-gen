@@ -262,8 +262,12 @@ export const getDefaultOptions = (provider: 'openai' | 'gemini' | 'falai'): Part
 
     case 'gemini':
       return {
-        model: 'gemini-2.5-flash-image',
+        model: 'gemini-3-pro-image-preview',
       };
+      // case 'gemini':
+      //   return {
+      //     model: 'gemini-2.5-flash-image',
+      //   }; // Don't remove that line yet
 
     case 'falai':
       return {

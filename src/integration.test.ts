@@ -100,7 +100,7 @@ describe('Integration Tests - Real Provider Calls', () => {
       } finally {
         cleanUpTestFile(outputPath);
       }
-    }, 30000); // 30 second timeout for API calls
+    }, 180000); // 3 minute timeout for API calls
   });
 
   describe('Gemini Image Generation', () => {
@@ -133,7 +133,7 @@ describe('Integration Tests - Real Provider Calls', () => {
       } finally {
         cleanUpTestFile(outputPath);
       }
-    }, 30000); // 30 second timeout for API calls
+    }, 180000); // 3 minute timeout for API calls
   });
 
   describe('FAL.ai Image Generation', () => {
@@ -170,7 +170,7 @@ describe('Integration Tests - Real Provider Calls', () => {
       } finally {
         cleanUpTestFile(outputPath);
       }
-    }, 30000); // 30 second timeout for API calls
+    }, 180000); // 3 minute timeout for API calls
   });
 
   describe('Character Sheet Generation', () => {
@@ -206,7 +206,7 @@ describe('Integration Tests - Real Provider Calls', () => {
       } finally {
         cleanUpTestFile(outputPath);
       }
-    }, 45000); // 45 second timeout for complex generation
+    }, 180000); // 3 minute timeout for complex generation
   });
 
   describe('Texture Generation', () => {
@@ -244,7 +244,7 @@ describe('Integration Tests - Real Provider Calls', () => {
       } finally {
         cleanUpTestFile(outputPath);
       }
-    }, 30000); // 30 second timeout for API calls
+    }, 180000); // 3 minute timeout for API calls
   });
 
   describe('Error Handling', () => {
@@ -270,6 +270,6 @@ describe('Integration Tests - Real Provider Calls', () => {
         process.env.OPENAI_API_KEY = originalKey;
         cleanUpTestFile(outputPath);
       }
-    }, 15000); // 15 second timeout for error cases
+    }, 180000); // 3 minute timeout for error cases
   });
 });

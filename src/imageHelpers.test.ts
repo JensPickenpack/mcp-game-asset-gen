@@ -97,7 +97,7 @@ describe('Image Helpers', () => {
       const defaults = getDefaultOptions('gemini');
 
       expect(defaults).toEqual({
-        model: 'gemini-2.5-flash-image',
+        model: 'gemini-3-pro-image-preview',
       });
     });
 

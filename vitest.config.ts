@@ -4,5 +4,6 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    testTimeout: 180000, // 3 minutes timeout for image generation tests
   },
 });

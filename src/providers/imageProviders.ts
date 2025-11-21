@@ -107,7 +107,8 @@ export const geminiGenerateImage = async (args: {
 }): Promise<string> => {
   const apiKey = getGeminiKey();
   
-  const model = args.model || "gemini-2.5-flash-image";
+  const model = args.model || "gemini-3-pro-image-preview";
+  // const model = args.model || "gemini-2.5-flash-image"; // Don't remove that line yet
   const parts: any[] = [
     {
       text: args.prompt
