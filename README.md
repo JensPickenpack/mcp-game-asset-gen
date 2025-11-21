@@ -64,12 +64,12 @@ The server provides tools and prompts for asset generation through the MCP proto
     - `style` (optional): Image style preference ('vivid', 'natural')
     - `n` (optional): Number of images to generate (1-10)
 
-- `gemini_generate_image`: Generate images using Google's Gemini 2.5 Flash native image generation
+- `gemini_generate_image`: Generate images using Google's Gemini native image generation (supports 2.5 Flash and 3 Pro models)
   - Parameters:
     - `prompt` (required): Description of the image to generate
     - `outputPath` (required): Path where the generated image should be saved
     - `inputImagePaths` (optional): Array of paths to input images for variation/combination
-    - `model` (optional): Gemini model to use (default: gemini-2.5-flash-image)
+    - `model` (optional): Gemini model to use ('gemini-2.5-flash-image', 'gemini-3-pro-image-preview', default: gemini-3-pro-image-preview)
 
 - `falai_generate_image`: Generate high-quality images using FAL.ai's Qwen image generation model
   - Parameters:
@@ -94,7 +94,7 @@ The server provides tools and prompts for asset generation through the MCP proto
     - `characterDescription` (required): Detailed description of the character
     - `outputPath` (required): Path where the character sheet should be saved
     - `referenceImagePaths` (optional): Array of reference image paths (character, outfit, etc.)
-    - `model` (optional): Model to use for generation ('openai', 'gemini', 'falai', default: gemini)
+    - `model` (optional): Model to use for generation ('openai', 'gemini', 'falai', default: gemini - uses gemini-3-pro-image-preview)
     - `style` (optional): Art style for the character sheet (e.g., anime, realistic, cartoon)
     - `includeExpressions` (optional): Include multiple facial expressions
     - `includePoses` (optional): Include multiple poses/angles
@@ -104,7 +104,7 @@ The server provides tools and prompts for asset generation through the MCP proto
     - `prompt` (required): Description of the variation to create
     - `outputPath` (required): Path where the variation should be saved
     - `referenceImagePaths` (required): Array of reference image paths to combine
-    - `model` (optional): Model to use for generation ('openai', 'gemini', 'falai', default: gemini)
+    - `model` (optional): Model to use for generation ('openai', 'gemini', 'falai', default: gemini - uses gemini-3-pro-image-preview)
 
 - `generate_pixel_art_character`: Generate pixel art characters with specific dimensions for retro games
   - Parameters:
@@ -134,7 +134,7 @@ The server provides tools and prompts for asset generation through the MCP proto
     - `objectDescription` (required): Description of the 3D object
     - `outputBasePath` (required): Base path for output files (will append _front.png, _side.png, etc.)
     - `viewpoints` (optional): Viewpoints to generate ('front', 'back', 'left', 'right', 'top', 'bottom', 'perspective')
-    - `model` (optional): Model to use (default: gemini)
+    - `model` (optional): Model to use (default: gemini - uses gemini-3-pro-image-preview)
     - `style` (optional): Art style (e.g., technical drawing, concept art)
 
 #### 3D Model Generation
@@ -148,7 +148,7 @@ The server provides tools and prompts for asset generation through the MCP proto
     - `format` (optional): Output format ('glb', 'gltf', default: glb for web/game compatibility)
     - `textured_mesh` (optional): Generate textured mesh (Hunyuan3D only, 3x cost, default: true)
     - `autoGenerateReferences` (optional): Automatically generate reference images from prompt if no input images provided (default: true)
-    - `referenceModel` (optional): Model to use for automatic reference image generation ('openai', 'gemini', 'falai', default: gemini)
+    - `referenceModel` (optional): Model to use for automatic reference image generation ('openai', 'gemini', 'falai', default: gemini - uses gemini-3-pro-image-preview)
     - `referenceViews` (optional): Views to generate for reference images (default: ["front", "back", "top"])
     - `cleanupReferences` (optional): Clean up automatically generated reference images after 3D generation (default: true)
 
