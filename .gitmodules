@@ -1,0 +1,3 @@
+[submodule "tools/blender-mcp"]
+	path = tools/blender-mcp
+	url = https://github.com/JensPickenpack/blender-mcp.git

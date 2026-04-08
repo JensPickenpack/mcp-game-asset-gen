@@ -1,14 +1,12 @@
 import { createCanvas, loadImage } from "canvas";
-import { execFile } from "child_process";
 import { config } from "dotenv";
 import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import path from "path";
-import { promisify } from "util";
 
 // Load environment variables from the root .env file
 config({ path: path.resolve(process.cwd(), ".env") });
 
-const execFileAsync = promisify(execFile);
+// Use native fetch when available, otherwise dynamically import `node-fetch` when required.
 
 // Environment variable getters
 export const getPPQAIKey = (): string => {
@@ -35,56 +33,36 @@ export const makeHTTPRequest = async (
   headers: Record<string, string> = {},
   body?: any
 ): Promise<any> => {
-  const args = [
-    '-s',
-    '-X', method,
-    url
-  ];
-
-  // Add headers
-  Object.entries(headers).forEach(([key, value]) => {
-    args.push('-H', `${key}: ${value}`);
-  });
-
-  // Add body if present - for large payloads, use a temp file
-  if (body && method !== "GET") {
-    const bodyStr = JSON.stringify(body);
-    if (bodyStr.length > 50000) { // If body is large, use temp file
-      const tempFile = `/tmp/fal_request_${Date.now()}.json`;
-      writeFileSync(tempFile, bodyStr);
-      args.push('-d', `@${tempFile}`);
-
-      try {
-        const { stdout } = await execFileAsync('curl', args, { maxBuffer: 1024 * 1024 * 10 });
-        // Clean up temp file
-        try {
-          unlinkSync(tempFile);
-        } catch (cleanupError) {
-          // Ignore cleanup errors
-          console.warn('Failed to cleanup temp file:', cleanupError);
-        }
-        return JSON.parse(stdout);
-      } catch (error) {
-        // Clean up temp file on error
-        try {
-          unlinkSync(tempFile);
-        } catch (cleanupError) {
-          // Ignore cleanup errors
-          console.warn('Failed to cleanup temp file:', cleanupError);
-        }
-        throw error;
-      }
-    } else {
-      args.push('-d', bodyStr);
+  // Resolve a fetch implementation: prefer global fetch, fall back to node-fetch dynamically
+  let fetchFn: any = (globalThis as any).fetch;
+  if (!fetchFn) {
+    try {
+      const mod = await import('node-fetch');
+      fetchFn = mod.default || mod;
+    } catch (err) {
+      throw new Error('No fetch available and node-fetch could not be imported: ' + (err instanceof Error ? err.message : String(err)));
     }
   }
 
-  try {
-    const { stdout } = await execFileAsync('curl', args, { maxBuffer: 1024 * 1024 * 10 }); // 10MB buffer
-    return JSON.parse(stdout);
-  } catch (error) {
-    throw new Error(`HTTP request failed: ${error instanceof Error ? error.message : String(error)}`);
+  const options: any = { method, headers: { ...headers } };
+  if (body && method !== 'GET') {
+    options.body = JSON.stringify(body);
+    if (!options.headers['Content-Type'] && !options.headers['content-type']) {
+      options.headers['Content-Type'] = 'application/json';
+    }
   }
+
+  const res = await fetchFn(url, options);
+  const text = await res.text();
+  let parsed: any = text;
+  try { parsed = JSON.parse(text); } catch { /* keep raw text */ }
+
+  if (!res.ok) {
+    const bodyMsg = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
+    throw new Error(`HTTP ${res.status} ${res.statusText}: ${bodyMsg}`);
+  }
+
+  return parsed;
 };
 
 // File operation helpers
@@ -103,9 +81,18 @@ export const downloadAndSaveImage = async (imageUrl: string, outputPath: string)
     const outputDir = path.dirname(outputPath);
     mkdirSync(outputDir, { recursive: true });
 
-    // Download image using curl
-    const args = ['-s', '-o', outputPath, imageUrl];
-    await execFileAsync('curl', args);
+    // Resolve fetch (global or node-fetch)
+    let fetchFn: any = (globalThis as any).fetch;
+    if (!fetchFn) {
+      const mod = await import('node-fetch');
+      fetchFn = mod.default || mod;
+    }
+
+    const res = await fetchFn(imageUrl);
+    if (!res.ok) throw new Error(`Image download failed: ${res.status} ${res.statusText}`);
+    const arrayBuffer = await res.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    writeFileSync(outputPath, buffer);
 
     return outputPath;
   } catch (error) {

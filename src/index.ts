@@ -570,6 +570,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const enhancedArgs = { ...(args as any) };
         if (!enhancedArgs.model) enhancedArgs.model = selectModelForTool('image');
         if (enhancedArgs.prompt) enhancedArgs.prompt = buildGamePrompt('image', enhancedArgs.prompt, enhancedArgs.model);
+        // Default quality for gpt-image-1 depends on prototypeMode:
+        // - prototypeMode true => prefer lower-quality (faster, cheaper) => 'low'
+        // - prototypeMode false => prefer high-quality => 'high'
+        if (!enhancedArgs.quality && enhancedArgs.model && typeof enhancedArgs.model === 'string') {
+          const m = enhancedArgs.model.toLowerCase();
+          if (m.startsWith('gpt-image-1')) {
+            enhancedArgs.quality = prototypeMode ? 'low' : 'high';
+          }
+        }
         const result = await ppqaiGenerateImage(enhancedArgs);
         return {
           content: [
