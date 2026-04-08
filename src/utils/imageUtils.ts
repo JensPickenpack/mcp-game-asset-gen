@@ -1,9 +1,9 @@
-import { execFile } from "child_process";
-import { promisify } from "util";
-import { config } from "dotenv";
-import path from "path";
-import { readFileSync, writeFileSync, mkdirSync, unlinkSync } from "fs";
 import { createCanvas, loadImage } from "canvas";
+import { execFile } from "child_process";
+import { config } from "dotenv";
+import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from "fs";
+import path from "path";
+import { promisify } from "util";
 
 // Load environment variables from the root .env file
 config({ path: path.resolve(process.cwd(), ".env") });
@@ -35,11 +35,19 @@ export const getFalAIKey = (): string => {
   return key;
 };
 
+export const getPPQAIKey = (): string => {
+  const key = process.env.PPQ_API_KEY;
+  if (!key) {
+    throw new Error("PPQ_API_KEY environment variable is required. Get yours at: https://ppq.ai/api-keys");
+  }
+  return key;
+};
+
 // Generic HTTP request helper
 export const makeHTTPRequest = async (
-  url: string, 
-  method: string = "POST", 
-  headers: Record<string, string> = {}, 
+  url: string,
+  method: string = "POST",
+  headers: Record<string, string> = {},
   body?: any
 ): Promise<any> => {
   const args = [
@@ -47,12 +55,12 @@ export const makeHTTPRequest = async (
     '-X', method,
     url
   ];
-  
+
   // Add headers
   Object.entries(headers).forEach(([key, value]) => {
     args.push('-H', `${key}: ${value}`);
   });
-  
+
   // Add body if present - for large payloads, use a temp file
   if (body && method !== "GET") {
     const bodyStr = JSON.stringify(body);
@@ -60,12 +68,12 @@ export const makeHTTPRequest = async (
       const tempFile = `/tmp/fal_request_${Date.now()}.json`;
       writeFileSync(tempFile, bodyStr);
       args.push('-d', `@${tempFile}`);
-      
+
       try {
         const { stdout } = await execFileAsync('curl', args, { maxBuffer: 1024 * 1024 * 10 });
         // Clean up temp file
-        try { 
-          unlinkSync(tempFile); 
+        try {
+          unlinkSync(tempFile);
         } catch (cleanupError) {
           // Ignore cleanup errors
           console.warn('Failed to cleanup temp file:', cleanupError);
@@ -73,8 +81,8 @@ export const makeHTTPRequest = async (
         return JSON.parse(stdout);
       } catch (error) {
         // Clean up temp file on error
-        try { 
-          unlinkSync(tempFile); 
+        try {
+          unlinkSync(tempFile);
         } catch (cleanupError) {
           // Ignore cleanup errors
           console.warn('Failed to cleanup temp file:', cleanupError);
@@ -85,7 +93,7 @@ export const makeHTTPRequest = async (
       args.push('-d', bodyStr);
     }
   }
-  
+
   try {
     const { stdout } = await execFileAsync('curl', args, { maxBuffer: 1024 * 1024 * 10 }); // 10MB buffer
     return JSON.parse(stdout);
@@ -109,11 +117,11 @@ export const downloadAndSaveImage = async (imageUrl: string, outputPath: string)
     // Ensure output directory exists
     const outputDir = path.dirname(outputPath);
     mkdirSync(outputDir, { recursive: true });
-    
+
     // Download image using curl
     const args = ['-s', '-o', outputPath, imageUrl];
     await execFileAsync('curl', args);
-    
+
     return outputPath;
   } catch (error) {
     throw new Error(`Failed to download and save image to ${outputPath}: ${error instanceof Error ? error.message : String(error)}`);
@@ -125,14 +133,14 @@ export const saveBase64Image = (base64Data: string, outputPath: string): string 
     // Ensure output directory exists
     const outputDir = path.dirname(outputPath);
     mkdirSync(outputDir, { recursive: true });
-    
+
     // Remove data URL prefix if present (e.g., "data:image/png;base64,")
     const base64Clean = base64Data.replace(/^data:image\/[a-z]+;base64,/, '');
-    
+
     // Convert base64 to buffer and write to file
     const imageBuffer = Buffer.from(base64Clean, 'base64');
     writeFileSync(outputPath, imageBuffer);
-    
+
     return outputPath;
   } catch (error) {
     throw new Error(`Failed to save base64 image to ${outputPath}: ${error instanceof Error ? error.message : String(error)}`);
@@ -162,13 +170,13 @@ export const convertToTransparentBackground = async (
 
     // Read the input image
     const imageBuffer = readFileSync(inputPath);
-    
+
     // Parse PNG and convert background pixels to transparent
     const transparentBuffer = await convertImagePixelsToTransparent(imageBuffer, backgroundColor, tolerance);
-    
+
     // Write the transparent image
     writeFileSync(outputPath, transparentBuffer);
-    
+
     return outputPath;
   } catch (error) {
     throw new Error(`Failed to convert image to transparent background: ${error instanceof Error ? error.message : String(error)}`);
@@ -179,7 +187,7 @@ export const convertToTransparentBackground = async (
 export const generateTransparentImage = async (
   prompt: string,
   outputPath: string,
-  provider: 'openai' | 'gemini' | 'falai',
+  provider: 'openai' | 'gemini' | 'falai' | 'ppqai',
   options: {
     backgroundColor?: 'white' | 'black';
     tolerance?: number;
@@ -203,12 +211,12 @@ export const generateTransparentImage = async (
 
     // Step 1: Generate image with solid background
     const transparentPrompt = `${prompt}, plain ${backgroundColor} background, no shadows, isolated subject, professional product photography style`;
-    
+
     const tempPath = outputPath.replace(/\.[^.]+$/, '_temp_solid.png');
-    
+
     // Import generateImage function
     const { generateImage } = await import('../providers/imageHelpers.js');
-    
+
     await generateImage({
       provider,
       prompt: transparentPrompt,
@@ -250,21 +258,21 @@ const convertImagePixelsToTransparent = async (
   try {
     // Load the image
     const image = await loadImage(imageBuffer);
-    
+
     // Create canvas with the same dimensions
     const canvas = createCanvas(image.width, image.height);
     const ctx = canvas.getContext('2d');
-    
+
     // Draw the image
     ctx.drawImage(image, 0, 0);
-    
+
     // Get image data
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
-    
+
     // Determine target color based on background type
     let targetR = 255, targetG = 255, targetB = 255; // Default to white
-    
+
     if (backgroundColor === 'black') {
       targetR = 0; targetG = 0; targetB = 0;
     } else if (backgroundColor === 'auto') {
@@ -275,7 +283,7 @@ const convertImagePixelsToTransparent = async (
         { x: 0, y: canvas.height - 1 }, // bottom-left
         { x: canvas.width - 1, y: canvas.height - 1 } // bottom-right
       ];
-      
+
       let totalR = 0, totalG = 0, totalB = 0;
       for (const corner of corners) {
         const idx = (corner.y * canvas.width + corner.x) * 4;
@@ -283,34 +291,34 @@ const convertImagePixelsToTransparent = async (
         totalG += data[idx + 1];
         totalB += data[idx + 2];
       }
-      
+
       targetR = Math.round(totalR / 4);
       targetG = Math.round(totalG / 4);
       targetB = Math.round(totalB / 4);
     }
-    
+
     // Convert pixels matching target color to transparent
     for (let i = 0; i < data.length; i += 4) {
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
-      
+
       // Calculate color distance from target
       const distance = Math.sqrt(
-        Math.pow(r - targetR, 2) + 
-        Math.pow(g - targetG, 2) + 
+        Math.pow(r - targetR, 2) +
+        Math.pow(g - targetG, 2) +
         Math.pow(b - targetB, 2)
       );
-      
+
       // If within tolerance, make transparent
       if (distance <= tolerance) {
         data[i + 3] = 0; // Set alpha to 0 (transparent)
       }
     }
-    
+
     // Put the modified image data back
     ctx.putImageData(imageData, 0, 0);
-    
+
     // Convert to buffer
     return canvas.toBuffer('image/png');
   } catch (error) {

@@ -1,23 +1,19 @@
+import path from 'path';
 import {
-  makeHTTPRequest,
-  getOpenAIKey,
-  getGeminiKey,
-  getFalAIKey,
-  encodeImageToBase64,
   downloadAndSaveImage,
+  encodeImageToBase64,
+  getFalAIKey,
+  getGeminiKey,
+  getOpenAIKey,
+  getPPQAIKey,
+  makeHTTPRequest,
   saveBase64Image,
 } from '../utils/imageUtils.js';
-import path from 'path';
 
 // Export helper functions from imageHelpers for external use
 export {
-  generateImage,
-  generateMultipleImages,
-  generateImageComparison,
-  validateImageOptions,
-  getDefaultOptions,
-  mergeWithDefaults,
-  type ImageGenerationOptions,
+  generateImage, generateImageComparison, generateMultipleImages, getDefaultOptions,
+  mergeWithDefaults, validateImageOptions, type ImageGenerationOptions
 } from './imageHelpers.js';
 
 // OpenAI Image Generation
@@ -31,7 +27,7 @@ export const openaiGenerateImage = async (args: {
   n?: number;
 }): Promise<string> => {
   const apiKey = getOpenAIKey();
-  
+
   // Determine if this is image generation or editing
   const isEditing = !!args.inputImagePath;
   let endpoint = "https://api.openai.com/v1/images/generations";
@@ -40,7 +36,7 @@ export const openaiGenerateImage = async (args: {
     n: args.n || 1,
     size: args.size || "1024x1024",
   };
-  
+
   // For editing, use different endpoint and add image
   if (isEditing && args.inputImagePath) {
     endpoint = "https://api.openai.com/v1/images/edits";
@@ -51,26 +47,26 @@ export const openaiGenerateImage = async (args: {
     body.model = "gpt-image-1";
     // GPT image models don't support DALL-E specific parameters
   }
-  
+
   const headers = {
     "Authorization": `Bearer ${apiKey}`,
     "Content-Type": "application/json"
   };
-  
+
   const response = await makeHTTPRequest(endpoint, "POST", headers, body);
-  
+
   if (response.error) {
     throw new Error(`OpenAI API error: ${response.error.message}`);
   }
-  
+
   // Save generated images and collect file paths
   const savedPaths: string[] = [];
   const images = response.data || [];
-  
+
   for (let i = 0; i < images.length; i++) {
     const image = images[i];
     let outputPath = args.outputPath;
-    
+
     // If multiple images, add index to filename
     if (images.length > 1) {
       const ext = path.extname(outputPath) || '.png';
@@ -78,7 +74,7 @@ export const openaiGenerateImage = async (args: {
       const dir = path.dirname(outputPath);
       outputPath = path.join(dir, `${baseName}_${i + 1}${ext}`);
     }
-    
+
     // Download and save the image
     if (image.url) {
       await downloadAndSaveImage(image.url, outputPath);
@@ -88,7 +84,7 @@ export const openaiGenerateImage = async (args: {
       savedPaths.push(outputPath);
     }
   }
-  
+
   return JSON.stringify({
     provider: "OpenAI",
     operation: isEditing ? "edit" : "generate",
@@ -106,7 +102,7 @@ export const geminiGenerateImage = async (args: {
   model?: string;
 }): Promise<string> => {
   const apiKey = getGeminiKey();
-  
+
   const model = args.model || "gemini-3-pro-image-preview";
   // const model = args.model || "gemini-2.5-flash-image"; // Don't remove that line yet
   const parts: any[] = [
@@ -114,7 +110,7 @@ export const geminiGenerateImage = async (args: {
       text: args.prompt
     }
   ];
-  
+
   // Add input images if provided
   if (args.inputImagePaths && args.inputImagePaths.length > 0) {
     for (const imagePath of args.inputImagePaths) {
@@ -127,7 +123,7 @@ export const geminiGenerateImage = async (args: {
       });
     }
   }
-  
+
   const body = {
     contents: [
       {
@@ -135,23 +131,23 @@ export const geminiGenerateImage = async (args: {
       }
     ]
   };
-  
+
   const headers = {
     "x-goog-api-key": apiKey,
     "Content-Type": "application/json"
   };
-  
+
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-  
+
   const response = await makeHTTPRequest(endpoint, "POST", headers, body);
-  
+
   if (response.error) {
     throw new Error(`Gemini API error: ${response.error.message || response.error}`);
   }
-  
+
   // Process the response to extract image data
   const savedPaths: string[] = [];
-  
+
   if (response.candidates && response.candidates.length > 0) {
     const candidate = response.candidates[0];
     if (candidate.content && candidate.content.parts) {
@@ -165,11 +161,11 @@ export const geminiGenerateImage = async (args: {
       }
     }
   }
-  
+
   if (savedPaths.length === 0) {
     throw new Error("No image data received from Gemini API");
   }
-  
+
   return JSON.stringify({
     provider: "Google Gemini",
     model: model,
@@ -189,7 +185,7 @@ export const falaiGenerateImage = async (args: {
   guidance_scale?: number;
 }): Promise<string> => {
   const apiKey = getFalAIKey();
-  
+
   const body = {
     prompt: args.prompt,
     image_size: args.image_size || "square_hd",
@@ -197,23 +193,23 @@ export const falaiGenerateImage = async (args: {
     guidance_scale: args.guidance_scale || 7.5,
     enable_safety_checker: true
   };
-  
+
   const headers = {
     "Authorization": `Key ${apiKey}`,
     "Content-Type": "application/json"
   };
-  
+
   const endpoint = "https://fal.run/fal-ai/qwen-image";
-  
+
   const response = await makeHTTPRequest(endpoint, "POST", headers, body);
-  
+
   if (response.error || response.detail) {
     throw new Error(`FAL.ai API error: ${response.error?.message || JSON.stringify(response.detail || response.error)}`);
   }
-  
+
   // Save generated image
   const savedPaths: string[] = [];
-  
+
   if (response.images && response.images.length > 0) {
     const image = response.images[0];
     if (image.url) {
@@ -225,7 +221,7 @@ export const falaiGenerateImage = async (args: {
   } else {
     throw new Error("No images array in FAL.ai response");
   }
-  
+
   return JSON.stringify({
     provider: "FAL.ai",
     model: "qwen-image",
@@ -247,35 +243,35 @@ export const falaiEditImage = async (args: {
   guidance_scale?: number;
 }): Promise<string> => {
   const apiKey = getFalAIKey();
-  
+
   // For now, use base64 inline (we can optimize later with proper upload)
   const imageBase64 = encodeImageToBase64(args.inputImagePath);
-  
+
   const body = {
     prompt: args.prompt,
     image_url: `data:image/png;base64,${imageBase64}`,
-    image_size: args.image_size || "square_hd", 
+    image_size: args.image_size || "square_hd",
     num_inference_steps: args.num_inference_steps || 20,
     guidance_scale: args.guidance_scale || 7.5,
     enable_safety_checker: true
   };
-  
+
   const headers = {
     "Authorization": `Key ${apiKey}`,
     "Content-Type": "application/json"
   };
-  
+
   const endpoint = "https://fal.run/fal-ai/qwen-image-edit";
-  
+
   const response = await makeHTTPRequest(endpoint, "POST", headers, body);
-  
+
   if (response.error || response.detail) {
     throw new Error(`FAL.ai API error: ${response.error?.message || JSON.stringify(response.detail || response.error)}`);
   }
-  
+
   // Save edited image
   const savedPaths: string[] = [];
-  
+
   if (response.images && response.images.length > 0) {
     const image = response.images[0];
     if (image.url) {
@@ -287,7 +283,7 @@ export const falaiEditImage = async (args: {
   } else {
     throw new Error("No images array in FAL.ai edit response");
   }
-  
+
   return JSON.stringify({
     provider: "FAL.ai",
     model: "qwen-image-edit",
@@ -301,16 +297,101 @@ export const falaiEditImage = async (args: {
   });
 };
 
+// PPQ.ai Image Generation (OpenAI-compatible proxy with many models)
+export const ppqaiGenerateImage = async (args: {
+  prompt: string;
+  outputPath: string;
+  model?: "gpt-image-1" | "gpt-image-1.5" | "nano-banana-pro" | "flux-2-pro" | "flux-2-flex" | "flux-kontext-pro" | "flux-kontext-max";
+  quality?: string;
+  n?: number;
+  size?: string;
+  image_url?: string;
+}): Promise<string> => {
+  const apiKey = getPPQAIKey();
+
+  const model = args.model || "nano-banana-pro";
+
+  const body: any = {
+    model: model,
+    prompt: args.prompt,
+    n: args.n || 1,
+  };
+
+  if (args.quality) {
+    body.quality = args.quality;
+  }
+
+  if (args.size) {
+    body.size = args.size;
+  }
+
+  if (args.image_url) {
+    body.image_url = args.image_url;
+  }
+
+  const headers = {
+    "Authorization": `Bearer ${apiKey}`,
+    "Content-Type": "application/json"
+  };
+
+  const endpoint = "https://api.ppq.ai/v1/images/generations";
+
+  const response = await makeHTTPRequest(endpoint, "POST", headers, body);
+
+  if (response.error) {
+    throw new Error(`PPQ.ai API error: ${response.error.message || JSON.stringify(response.error)}`);
+  }
+
+  // Save generated images
+  const savedPaths: string[] = [];
+  const images = response.data || [];
+
+  for (let i = 0; i < images.length; i++) {
+    const image = images[i];
+    let outputPath = args.outputPath;
+
+    // If multiple images, add index to filename
+    if (images.length > 1) {
+      const ext = path.extname(outputPath) || '.png';
+      const baseName = path.basename(outputPath, ext);
+      const dir = path.dirname(outputPath);
+      outputPath = path.join(dir, `${baseName}_${i + 1}${ext}`);
+    }
+
+    if (image.url) {
+      await downloadAndSaveImage(image.url, outputPath);
+      savedPaths.push(outputPath);
+    } else if (image.b64_json) {
+      saveBase64Image(image.b64_json, outputPath);
+      savedPaths.push(outputPath);
+    }
+  }
+
+  if (savedPaths.length === 0) {
+    throw new Error("No image data received from PPQ.ai API");
+  }
+
+  return JSON.stringify({
+    provider: "PPQ.ai",
+    model: model,
+    operation: "generate",
+    savedPaths: savedPaths,
+    prompt_used: args.prompt,
+    cost: response.cost,
+    parameters: body
+  });
+};
+
 // Helper functions for different providers (deprecated - use imageHelpers instead)
 export const generateWithProvider = async (
-  provider: "openai" | "gemini" | "falai",
+  provider: "openai" | "gemini" | "falai" | "ppqai",
   prompt: string,
   outputPath: string,
   inputImagePaths?: string[]
 ): Promise<string> => {
   // Import the new helper function
   const { generateImage } = await import('./imageHelpers.js');
-  
+
   return await generateImage({
     provider,
     prompt,
@@ -331,39 +412,39 @@ export const generateCharacterSheet = async (args: {
 }): Promise<string> => {
   const model = args.model || "gemini";
   const style = args.style || "detailed digital art";
-  
+
   // Build comprehensive character sheet prompt
   let prompt = `Create a detailed character sheet for: ${args.characterDescription}. `;
   prompt += `Art style: ${style}. `;
-  
+
   if (args.includeExpressions) {
     prompt += "Include multiple facial expressions (happy, sad, angry, surprised, neutral). ";
   }
-  
+
   if (args.includePoses) {
     prompt += "Show the character from multiple angles (front view, side view, back view). ";
   }
-  
+
   prompt += "Character sheet format with clean white background, professional reference sheet layout, ";
   prompt += "consistent character design, high quality digital artwork suitable for animation or game development.";
-  
+
   if (args.referenceImagePaths && args.referenceImagePaths.length > 0) {
     prompt += " Base the character on the provided reference images, maintaining consistency with the visual style and features shown.";
   }
-  
+
   try {
     // Import the new helper function
     const { generateImage } = await import('./imageHelpers.js');
-    
+
     const result = await generateImage({
       provider: model,
       prompt,
       outputPath: args.outputPath,
       inputImagePaths: args.referenceImagePaths,
     });
-    
+
     const parsedResult = JSON.parse(result);
-    
+
     return JSON.stringify({
       ...parsedResult,
       operation: "character_sheet_generation",
@@ -375,7 +456,7 @@ export const generateCharacterSheet = async (args: {
       },
       reference_images: args.referenceImagePaths || []
     });
-    
+
   } catch (error) {
     throw new Error(`Character sheet generation failed: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -389,35 +470,35 @@ export const generateCharacterVariation = async (args: {
   model?: "openai" | "gemini" | "falai";
 }): Promise<string> => {
   const model = args.model || "gemini";
-  
+
   if (!args.referenceImagePaths || args.referenceImagePaths.length === 0) {
     throw new Error("At least one reference image is required for character variation");
   }
-  
+
   let prompt = args.prompt;
   prompt += " Maintain consistency with the character design from the reference images. ";
   prompt += "High quality digital artwork with consistent lighting and style.";
-  
+
   try {
     // Import the new helper function
     const { generateImage } = await import('./imageHelpers.js');
-    
+
     const result = await generateImage({
       provider: model,
       prompt,
       outputPath: args.outputPath,
       inputImagePaths: args.referenceImagePaths,
     });
-    
+
     const parsedResult = JSON.parse(result);
-    
+
     return JSON.stringify({
       ...parsedResult,
       operation: "character_variation",
       variation_prompt: args.prompt,
       reference_images: args.referenceImagePaths
     });
-    
+
   } catch (error) {
     throw new Error(`Character variation generation failed: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -436,38 +517,38 @@ export const generatePixelArtCharacter = async (args: {
 }): Promise<string> => {
   const model = args.model || "falai";
   const targetSize = parseInt(args.pixelDimensions.split('x')[0]);
-  
+
   // Note: AI models may not generate accurate small pixel art directly
   // We generate at 256x256 in pixel art style, then would scale down post-processing
   const generationSize = 256; // Always generate larger first
-  
+
   let prompt = `Pixel art character: ${args.characterDescription}. `;
   prompt += `Retro game pixel art style, limited color palette`;
   if (args.colors) {
     prompt += ` with ${args.colors} colors`;
   }
   prompt += `, clean pixels, no anti-aliasing, 8-bit/16-bit game style. `;
-  
+
   // For transparent backgrounds, specify isolated character
   if (args.transparentBackground) {
     prompt += "Character isolated on solid background, clean edges, no background details, ";
   }
-  
+
   if (args.spriteSheet) {
     prompt += "Generate as sprite sheet with multiple poses: idle, walking animation frames (4 frames), ";
     prompt += "facing front, back, left, right. Grid layout on single image. ";
   }
-  
+
   prompt += `Target final size will be ${args.pixelDimensions} pixels. `;
   prompt += "Sharp pixel boundaries, retro gaming aesthetic, solid colors.";
-  
+
   try {
     // Import the new helper function
     const { generateImage } = await import('./imageHelpers.js');
-    
+
     // Generate at higher resolution first
     const tempPath = args.outputPath.replace(/\.[^.]+$/, '_temp_256px.png');
-    
+
     const result = await generateImage({
       provider: model,
       prompt,
@@ -477,14 +558,14 @@ export const generatePixelArtCharacter = async (args: {
       transparencyTolerance: 20, // Lower tolerance for cleaner pixel art edges
       transparencyBlur: 0, // No blur for pixel art
     });
-    
+
     const parsedResult = JSON.parse(result);
-    
+
     let note = `Generated at ${generationSize}x${generationSize}px. Recommend scaling down to ${targetSize}x${targetSize}px and applying pixel-perfect scaling for final use.`;
     if (args.transparentBackground) {
       note += " Sprite has transparent background for game use.";
     }
-    
+
     return JSON.stringify({
       ...parsedResult,
       operation: "pixel_art_generation",
@@ -498,7 +579,7 @@ export const generatePixelArtCharacter = async (args: {
       temp_path: tempPath,
       note: note
     });
-    
+
   } catch (error) {
     throw new Error(`Pixel art generation failed: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -519,14 +600,14 @@ export const generateTexture = async (args: {
   const model = args.model || "falai";
   const textureSize = args.textureSize || "1024x1024";
   const materialType = args.materialType || "diffuse";
-  
+
   let prompt = `${materialType} texture map: ${args.textureDescription}. `;
   prompt += `High quality ${textureSize} texture, `;
-  
+
   if (args.seamless) {
     prompt += "seamless tileable pattern, repeating texture, no visible seams when tiled, ";
   }
-  
+
   // For transparent backgrounds, modify the prompt for sprite/decal style textures
   if (args.transparentBackground) {
     prompt += "sprite/decal style, ";
@@ -534,7 +615,7 @@ export const generateTexture = async (args: {
       prompt += "isolated object with transparent background, clean edges, no shadows, ";
     }
   }
-  
+
   switch (materialType) {
     case "diffuse":
       if (args.transparentBackground) {
@@ -553,17 +634,17 @@ export const generateTexture = async (args: {
       prompt += "displacement/height map, grayscale height information for 3D surface displacement";
       break;
   }
-  
+
   prompt += `, professional game/3D development quality, uniform lighting`;
   if (!args.transparentBackground) {
     prompt += ", no shadows";
   }
   prompt += ".";
-  
+
   try {
     // Import the new helper function
     const { generateImage } = await import('./imageHelpers.js');
-    
+
     const result = await generateImage({
       provider: model,
       prompt,
@@ -573,14 +654,14 @@ export const generateTexture = async (args: {
       transparencyTolerance: args.transparencyTolerance,
       transparencyBlur: 1, // Slight blur for smoother edges
     });
-    
+
     const parsedResult = JSON.parse(result);
-    
+
     let usageNote = "Ready for use in 3D engines (Unity, Unreal, Blender). Apply to materials as " + materialType + " map.";
     if (args.transparentBackground) {
       usageNote += " Texture has alpha transparency for sprites/decals.";
     }
-    
+
     return JSON.stringify({
       ...parsedResult,
       operation: "texture_generation",
@@ -591,7 +672,7 @@ export const generateTexture = async (args: {
       transparent_background: args.transparentBackground || false,
       usage_note: usageNote
     });
-    
+
   } catch (error) {
     throw new Error(`Texture generation failed: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -608,20 +689,20 @@ export const generateObjectSheet = async (args: {
   const model = args.model || "gemini";
   const viewpoints = args.viewpoints || ["front", "back", "left", "right", "top", "perspective"];
   const style = args.style || "clean concept art";
-  
+
   const results: any[] = [];
   const savedPaths: string[] = [];
-  
+
   // Import the new helper function
   const { generateImage } = await import('./imageHelpers.js');
-  
+
   for (const viewpoint of viewpoints) {
     const outputPath = args.outputBasePath.replace(/\.[^.]+$/, `_${viewpoint}.png`);
-    
+
     let prompt = `${args.objectDescription}, ${viewpoint} view, `;
     prompt += `${style} style, technical reference sheet, `;
     prompt += `clean white background, object centered, `;
-    
+
     switch (viewpoint) {
       case "front":
         prompt += "front-facing view, showing main features and details";
@@ -645,23 +726,23 @@ export const generateObjectSheet = async (args: {
         prompt += "3/4 perspective view, showing depth and three-dimensional form";
         break;
     }
-    
+
     prompt += ". Consistent object design, professional 3D reference quality.";
-    
+
     try {
       const result = await generateImage({
         provider: model,
         prompt,
         outputPath,
       });
-      
+
       const parsedResult = JSON.parse(result);
       results.push({
         viewpoint,
         result: parsedResult
       });
       savedPaths.push(outputPath);
-      
+
     } catch (error) {
       console.warn(`Failed to generate ${viewpoint} view:`, error);
       results.push({
@@ -670,7 +751,7 @@ export const generateObjectSheet = async (args: {
       });
     }
   }
-  
+
   return JSON.stringify({
     operation: "object_sheet_generation",
     object_description: args.objectDescription,

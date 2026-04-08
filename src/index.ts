@@ -2,33 +2,29 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import path from 'path';
 import {
   CallToolRequestSchema,
-  ListToolsRequestSchema,
-  ListPromptsRequestSchema,
   GetPromptRequestSchema,
+  ListPromptsRequestSchema,
+  ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import {
-  openaiGenerateImage,
-  geminiGenerateImage,
-  falaiGenerateImage,
   falaiEditImage,
-  generateWithProvider,
+  falaiGenerateImage,
+  geminiGenerateImage,
   generateCharacterSheet,
   generateCharacterVariation,
+  generateObjectSheet,
   generatePixelArtCharacter,
   generateTexture,
-  generateObjectSheet,
+  openaiGenerateImage,
+  ppqaiGenerateImage
 } from './providers/imageProviders.js';
 import {
-  generate3DModelSmart,
   generate3DModelAsync,
-  type Model3DGenerationOptionsExtended,
-  Model3DModel,
-  Model3DVariant,
   Model3DFormat,
-  AVAILABLE_VARIANTS,
+  Model3DModel,
+  Model3DVariant
 } from './providers/model3dHelpers.js';
 
 // Check environment variables for tool filtering
@@ -182,6 +178,47 @@ const allTools = [
     },
   },
   {
+    name: 'ppqai_generate_image',
+    description: 'Generate images using PPQ.ai (PayPerQ) unified API. Supports multiple models: gpt-image-1, nano-banana-pro (Gemini 3 Pro), flux-2-pro, flux-2-flex, flux-kontext-pro/max. Pay-per-use pricing, no subscription required.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prompt: {
+          type: 'string',
+          description: 'Detailed description of the image to generate. Include "plain white background" for transparency conversion support.',
+        },
+        outputPath: {
+          type: 'string',
+          description: 'Path where the generated image should be saved',
+        },
+        model: {
+          type: 'string',
+          enum: ['gpt-image-1', 'gpt-image-1.5', 'nano-banana-pro', 'flux-2-pro', 'flux-2-flex', 'flux-kontext-pro', 'flux-kontext-max'],
+          description: 'Image model to use (default: nano-banana-pro aka Gemini 3 Pro). gpt-image-1: quality low/medium/high. nano-banana-pro: quality standard/4k. flux-2-pro/flex: quality 1k/2k.',
+        },
+        quality: {
+          type: 'string',
+          description: 'Quality tier (model-specific): gpt-image-1: low/medium/high, nano-banana-pro: standard/4k, flux-2-pro/flex: 1k/2k',
+        },
+        n: {
+          type: 'number',
+          minimum: 1,
+          maximum: 10,
+          description: 'Number of images to generate (1-10)',
+        },
+        size: {
+          type: 'string',
+          description: 'Image size/aspect ratio (e.g., "1:1", "16:9", "9:16")',
+        },
+        image_url: {
+          type: 'string',
+          description: 'Source image URL for image-to-image models (e.g., flux-2-pro-i2i)',
+        },
+      },
+      required: ['prompt', 'outputPath'],
+    },
+  },
+  {
     name: 'generate_character_sheet',
     description: 'Generate character sheets from text descriptions or reference images using any available model. Character sheets are generated with plain white backgrounds for transparency conversion support.',
     inputSchema: {
@@ -202,7 +239,7 @@ const allTools = [
         },
         model: {
           type: 'string',
-          enum: ['openai', 'gemini', 'falai'],
+          enum: ['openai', 'gemini', 'falai', 'ppqai'],
           description: 'Model to use for generation (default: gemini)',
         },
         style: {
@@ -242,7 +279,7 @@ const allTools = [
         },
         model: {
           type: 'string',
-          enum: ['openai', 'gemini', 'falai'],
+          enum: ['openai', 'gemini', 'falai', 'ppqai'],
           description: 'Model to use for generation (default: gemini)',
         },
       },
@@ -274,7 +311,7 @@ const allTools = [
         },
         model: {
           type: 'string',
-          enum: ['openai', 'gemini', 'falai'],
+          enum: ['openai', 'gemini', 'falai', 'ppqai'],
           description: 'Model to use (default: falai)',
         },
         colors: {
@@ -321,7 +358,7 @@ const allTools = [
         },
         model: {
           type: 'string',
-          enum: ['openai', 'gemini', 'falai'],
+          enum: ['openai', 'gemini', 'falai', 'ppqai'],
           description: 'Model to use (default: falai)',
         },
         materialType: {
@@ -369,7 +406,7 @@ const allTools = [
         },
         model: {
           type: 'string',
-          enum: ['openai', 'gemini', 'falai'],
+          enum: ['openai', 'gemini', 'falai', 'ppqai'],
           description: 'Model to use (default: gemini)',
         },
         style: {
@@ -381,8 +418,8 @@ const allTools = [
     },
   },
   // REMOVED: image_to_3d synchronous tool - causes MCP timeouts
-// All 3D generation operations take longer than 60-second MCP timeout
-// Use image_to_3d_async instead for reliable background processing
+  // All 3D generation operations take longer than 60-second MCP timeout
+  // Use image_to_3d_async instead for reliable background processing
   {
     name: 'image_to_3d_async',
     description: 'Generate 3D models from images using advanced AI models (Trellis, Hunyuan3D 2.0, Hunyuan World) with automatic reference image generation and background processing. Returns a status file path immediately for progress tracking to avoid MCP timeouts. This is the recommended method for all 3D generation tasks.',
@@ -427,7 +464,7 @@ const allTools = [
         },
         referenceModel: {
           type: 'string',
-          enum: ['openai', 'gemini', 'falai'],
+          enum: ['openai', 'gemini', 'falai', 'ppqai'],
           description: 'Model to use for automatic reference image generation (default: gemini)',
         },
         referenceViews: {
@@ -528,6 +565,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      case 'ppqai_generate_image': {
+        const result = await ppqaiGenerateImage(args as any);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: result,
+            },
+          ],
+        };
+      }
+
       case 'generate_character_sheet': {
         const result = await generateCharacterSheet(args as any);
         return {
@@ -589,8 +638,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       // REMOVED: image_to_3d synchronous handler - causes MCP timeouts
-// All 3D generation operations exceed 60-second MCP timeout limit
-// Use image_to_3d_async instead for reliable background processing
+      // All 3D generation operations exceed 60-second MCP timeout limit
+      // Use image_to_3d_async instead for reliable background processing
 
       case 'image_to_3d_async': {
         if (!args) {
@@ -599,14 +648,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (!args.outputPath) {
           throw new Error('outputPath is required for image_to_3d_async');
         }
-        
+
         // Generate status file path
-        const statusFile = (args as any).statusFile || 
+        const statusFile = (args as any).statusFile ||
           (args as any).outputPath.replace(/\.[^.]+$/, '_status.json');
-        
+
         // Use hunyuan3d as default model for best quality
         const selectedModel = (args as any).model || 'hunyuan3d';
-        
+
         const result = await generate3DModelAsync(
           {
             prompt: (args as any).prompt || '',
@@ -623,7 +672,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           },
           statusFile
         );
-        
+
         return {
           content: [
             {

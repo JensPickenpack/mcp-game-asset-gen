@@ -1,16 +1,17 @@
-import {
-  openaiGenerateImage,
-  geminiGenerateImage,
-  falaiGenerateImage,
-  falaiEditImage,
-} from './imageProviders.js';
 import path from 'path';
+import {
+  falaiEditImage,
+  falaiGenerateImage,
+  geminiGenerateImage,
+  openaiGenerateImage,
+  ppqaiGenerateImage,
+} from './imageProviders.js';
 
 // Unified image generation interface
 export interface ImageGenerationOptions {
   prompt: string;
   outputPath: string;
-  provider: 'openai' | 'gemini' | 'falai';
+  provider: 'openai' | 'gemini' | 'falai' | 'ppqai';
   inputImagePaths?: string[];
   // OpenAI specific options
   size?: '1024x1024' | '1792x1024' | '1024x1792';
@@ -37,10 +38,10 @@ export const generateImage = async (options: ImageGenerationOptions): Promise<st
   // If transparent background is requested, use the specialized function
   if (transparentBackground) {
     const { generateTransparentImage } = await import('../utils/imageUtils.js');
-    
+
     // Handle the 'auto' backgroundColor by defaulting to 'white' for the generation function
     const generationBackgroundColor = options.backgroundColor === 'auto' ? 'white' : options.backgroundColor;
-    
+
     return JSON.stringify({
       operation: 'transparent_image_generation',
       provider,
@@ -109,6 +110,14 @@ export const generateImage = async (options: ImageGenerationOptions): Promise<st
         });
       }
 
+    case 'ppqai':
+      return await ppqaiGenerateImage({
+        prompt: options.prompt,
+        outputPath: options.outputPath,
+        model: (options.model as any) || 'nano-banana-pro',
+        n: options.n,
+      });
+
     default:
       throw new Error(`Unsupported provider: ${provider}`);
   }
@@ -159,7 +168,7 @@ export const generateMultipleImages = async (
 // Helper function to generate images with multiple providers for comparison
 export const generateImageComparison = async (
   options: Omit<ImageGenerationOptions, 'provider'> & {
-    providers: ('openai' | 'gemini' | 'falai')[];
+    providers: ('openai' | 'gemini' | 'falai' | 'ppqai')[];
   }
 ): Promise<string> => {
   const { providers, outputPath, ...baseOptions } = options;
@@ -214,8 +223,8 @@ export const validateImageOptions = (options: ImageGenerationOptions): void => {
     throw new Error('Output path is required and cannot be empty');
   }
 
-  if (!['openai', 'gemini', 'falai'].includes(options.provider)) {
-    throw new Error('Provider must be one of: openai, gemini, falai');
+  if (!['openai', 'gemini', 'falai', 'ppqai'].includes(options.provider)) {
+    throw new Error('Provider must be one of: openai, gemini, falai, ppqai');
   }
 
   // Provider-specific validation
@@ -250,7 +259,7 @@ export const validateImageOptions = (options: ImageGenerationOptions): void => {
 };
 
 // Helper function to get default options for each provider
-export const getDefaultOptions = (provider: 'openai' | 'gemini' | 'falai'): Partial<ImageGenerationOptions> => {
+export const getDefaultOptions = (provider: 'openai' | 'gemini' | 'falai' | 'ppqai'): Partial<ImageGenerationOptions> => {
   switch (provider) {
     case 'openai':
       return {
@@ -264,16 +273,22 @@ export const getDefaultOptions = (provider: 'openai' | 'gemini' | 'falai'): Part
       return {
         model: 'gemini-3-pro-image-preview',
       };
-      // case 'gemini':
-      //   return {
-      //     model: 'gemini-2.5-flash-image',
-      //   }; // Don't remove that line yet
+    // case 'gemini':
+    //   return {
+    //     model: 'gemini-2.5-flash-image',
+    //   }; // Don't remove that line yet
 
     case 'falai':
       return {
         image_size: 'square_hd',
         num_inference_steps: 20,
         guidance_scale: 7.5,
+      };
+
+    case 'ppqai':
+      return {
+        model: 'nano-banana-pro',
+        n: 1,
       };
 
     default:
