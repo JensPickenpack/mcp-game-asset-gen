@@ -11,34 +11,19 @@ config({ path: path.resolve(process.cwd(), ".env") });
 const execFileAsync = promisify(execFile);
 
 // Environment variable getters
-export const getOpenAIKey = (): string => {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) {
-    throw new Error("OPENAI_API_KEY environment variable is required");
-  }
-  return key;
-};
-
-export const getGeminiKey = (): string => {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) {
-    throw new Error("GEMINI_API_KEY environment variable is required");
-  }
-  return key;
-};
-
-export const getFalAIKey = (): string => {
-  const key = process.env.FAL_AI_API_KEY;
-  if (!key) {
-    throw new Error("FAL_AI_API_KEY environment variable is required");
-  }
-  return key;
-};
-
 export const getPPQAIKey = (): string => {
   const key = process.env.PPQ_API_KEY;
   if (!key) {
     throw new Error("PPQ_API_KEY environment variable is required. Get yours at: https://ppq.ai/api-keys");
+  }
+  return key;
+};
+
+// FAL.ai key getter (only used for 3D model generation, which ppq.ai doesn't proxy)
+export const getFalAIKey = (): string => {
+  const key = process.env.FAL_AI_API_KEY;
+  if (!key) {
+    throw new Error("FAL_AI_API_KEY environment variable is required (used for 3D model generation)");
   }
   return key;
 };
@@ -187,18 +172,16 @@ export const convertToTransparentBackground = async (
 export const generateTransparentImage = async (
   prompt: string,
   outputPath: string,
-  provider: 'openai' | 'gemini' | 'falai' | 'ppqai',
+  provider: 'ppqai' = 'ppqai',
   options: {
     backgroundColor?: 'white' | 'black';
     tolerance?: number;
     blur?: number;
     // Additional generation options
-    size?: '1024x1024' | '1792x1024' | '1024x1792';
-    quality?: 'standard' | 'hd';
-    style?: 'vivid' | 'natural';
-    image_size?: 'square_hd' | 'square' | 'portrait_4_3' | 'portrait_16_9' | 'landscape_4_3' | 'landscape_16_9';
-    num_inference_steps?: number;
-    guidance_scale?: number;
+    size?: string;
+    quality?: string;
+    model?: string;
+    n?: number;
   } = {}
 ): Promise<string> => {
   try {
@@ -218,7 +201,6 @@ export const generateTransparentImage = async (
     const { generateImage } = await import('../providers/imageHelpers.js');
 
     await generateImage({
-      provider,
       prompt: transparentPrompt,
       outputPath: tempPath,
       ...generationOptions

@@ -1,64 +1,50 @@
 import path from 'path';
 import {
-  falaiEditImage,
-  falaiGenerateImage,
-  geminiGenerateImage,
-  openaiGenerateImage,
   ppqaiGenerateImage,
 } from './imageProviders.js';
 
-// Unified image generation interface
+// Unified image generation interface (ppq.ai only)
 export interface ImageGenerationOptions {
   prompt: string;
   outputPath: string;
-  provider: 'openai' | 'gemini' | 'falai' | 'ppqai';
   inputImagePaths?: string[];
-  // OpenAI specific options
-  size?: '1024x1024' | '1792x1024' | '1024x1792';
-  quality?: 'standard' | 'hd';
-  style?: 'vivid' | 'natural';
-  n?: number;
-  // Gemini specific options
+  // PPQ.ai model selection
   model?: string;
-  // FAL.ai specific options
-  image_size?: 'square_hd' | 'square' | 'portrait_4_3' | 'portrait_16_9' | 'landscape_4_3' | 'landscape_16_9';
-  num_inference_steps?: number;
-  guidance_scale?: number;
+  quality?: string;
+  n?: number;
+  size?: string;
   // Transparent background options
   transparentBackground?: boolean;
   backgroundColor?: 'white' | 'black' | 'auto';
-  transparencyTolerance?: number; // 0-255, color variation tolerance
-  transparencyBlur?: number; // Edge smoothing blur
+  transparencyTolerance?: number;
+  transparencyBlur?: number;
 }
 
-// Helper function to generate images with any provider
+// Helper function to generate images via PPQ.ai
 export const generateImage = async (options: ImageGenerationOptions): Promise<string> => {
-  const { provider, inputImagePaths, transparentBackground, ...providerOptions } = options;
+  const { inputImagePaths, transparentBackground, ...restOptions } = options;
 
   // If transparent background is requested, use the specialized function
   if (transparentBackground) {
     const { generateTransparentImage } = await import('../utils/imageUtils.js');
 
-    // Handle the 'auto' backgroundColor by defaulting to 'white' for the generation function
     const generationBackgroundColor = options.backgroundColor === 'auto' ? 'white' : options.backgroundColor;
 
     return JSON.stringify({
       operation: 'transparent_image_generation',
-      provider,
+      provider: 'ppqai',
       savedPaths: [await generateTransparentImage(
         options.prompt,
         options.outputPath,
-        provider,
+        'ppqai',
         {
           backgroundColor: generationBackgroundColor,
           tolerance: options.transparencyTolerance,
           blur: options.transparencyBlur,
           size: options.size,
           quality: options.quality,
-          style: options.style,
-          image_size: options.image_size,
-          num_inference_steps: options.num_inference_steps,
-          guidance_scale: options.guidance_scale,
+          model: options.model,
+          n: options.n,
         }
       )],
       prompt_used: options.prompt,
@@ -69,58 +55,15 @@ export const generateImage = async (options: ImageGenerationOptions): Promise<st
     });
   }
 
-  switch (provider) {
-    case 'openai':
-      return await openaiGenerateImage({
-        prompt: options.prompt,
-        outputPath: options.outputPath,
-        inputImagePath: inputImagePaths?.[0], // OpenAI editing takes single image
-        size: options.size,
-        quality: options.quality,
-        style: options.style,
-        n: options.n,
-      });
-
-    case 'gemini':
-      return await geminiGenerateImage({
-        prompt: options.prompt,
-        outputPath: options.outputPath,
-        inputImagePaths: inputImagePaths,
-        model: options.model,
-      });
-
-    case 'falai':
-      if (inputImagePaths && inputImagePaths.length > 0) {
-        // Use editing if input image provided
-        return await falaiEditImage({
-          prompt: options.prompt,
-          inputImagePath: inputImagePaths[0], // FAL.ai edit takes single image
-          outputPath: options.outputPath,
-          image_size: options.image_size,
-          num_inference_steps: options.num_inference_steps,
-          guidance_scale: options.guidance_scale,
-        });
-      } else {
-        return await falaiGenerateImage({
-          prompt: options.prompt,
-          outputPath: options.outputPath,
-          image_size: options.image_size,
-          num_inference_steps: options.num_inference_steps,
-          guidance_scale: options.guidance_scale,
-        });
-      }
-
-    case 'ppqai':
-      return await ppqaiGenerateImage({
-        prompt: options.prompt,
-        outputPath: options.outputPath,
-        model: (options.model as any) || 'nano-banana-pro',
-        n: options.n,
-      });
-
-    default:
-      throw new Error(`Unsupported provider: ${provider}`);
-  }
+  return await ppqaiGenerateImage({
+    prompt: options.prompt,
+    outputPath: options.outputPath,
+    model: (options.model as any) || 'nano-banana-pro',
+    quality: options.quality,
+    n: options.n,
+    size: options.size,
+    inputImagePath: inputImagePaths?.[0],
+  });
 };
 
 // Helper function to generate multiple images with consistent naming
@@ -165,40 +108,39 @@ export const generateMultipleImages = async (
   });
 };
 
-// Helper function to generate images with multiple providers for comparison
+// Helper function to generate images with multiple providers for comparison (kept for compatibility but uses ppqai only)
 export const generateImageComparison = async (
-  options: Omit<ImageGenerationOptions, 'provider'> & {
-    providers: ('openai' | 'gemini' | 'falai' | 'ppqai')[];
+  options: ImageGenerationOptions & {
+    models?: string[];
   }
 ): Promise<string> => {
-  const { providers, outputPath, ...baseOptions } = options;
+  const { models = ['nano-banana-pro', 'flux-2-pro'], outputPath, ...baseOptions } = options;
   const savedPaths: string[] = [];
   const results: any[] = [];
 
-  for (const provider of providers) {
+  for (const model of models) {
     try {
-      // Generate unique output path for each provider
       const ext = path.extname(outputPath) || '.png';
       const baseName = path.basename(outputPath, ext);
       const dir = path.dirname(outputPath);
-      const providerOutputPath = path.join(dir, `${baseName}_${provider}${ext}`);
+      const modelOutputPath = path.join(dir, `${baseName}_${model}${ext}`);
 
       const result = await generateImage({
         ...baseOptions,
-        provider,
-        outputPath: providerOutputPath,
+        model,
+        outputPath: modelOutputPath,
       });
 
       const parsedResult = JSON.parse(result);
       savedPaths.push(...parsedResult.savedPaths);
       results.push({
-        provider,
+        model,
         result: parsedResult,
       });
 
     } catch (error) {
       results.push({
-        provider,
+        model,
         error: error instanceof Error ? error.message : String(error),
       });
     }
@@ -206,7 +148,7 @@ export const generateImageComparison = async (
 
   return JSON.stringify({
     operation: 'image_generation_comparison',
-    providers_requested: providers,
+    models_requested: models,
     successfully_generated: results.filter(r => !r.error).length,
     saved_paths: savedPaths,
     results: results,
@@ -223,81 +165,21 @@ export const validateImageOptions = (options: ImageGenerationOptions): void => {
     throw new Error('Output path is required and cannot be empty');
   }
 
-  if (!['openai', 'gemini', 'falai', 'ppqai'].includes(options.provider)) {
-    throw new Error('Provider must be one of: openai, gemini, falai, ppqai');
-  }
-
-  // Provider-specific validation
-  switch (options.provider) {
-    case 'openai':
-      if (options.size && !['1024x1024', '1792x1024', '1024x1792'].includes(options.size)) {
-        throw new Error('OpenAI size must be one of: 1024x1024, 1792x1024, 1024x1792');
-      }
-      if (options.quality && !['standard', 'hd'].includes(options.quality)) {
-        throw new Error('OpenAI quality must be one of: standard, hd');
-      }
-      if (options.style && !['vivid', 'natural'].includes(options.style)) {
-        throw new Error('OpenAI style must be one of: vivid, natural');
-      }
-      if (options.n && (options.n < 1 || options.n > 10)) {
-        throw new Error('OpenAI n must be between 1 and 10');
-      }
-      break;
-
-    case 'falai':
-      if (options.image_size && !['square_hd', 'square', 'portrait_4_3', 'portrait_16_9', 'landscape_4_3', 'landscape_16_9'].includes(options.image_size)) {
-        throw new Error('FAL.ai image_size must be one of: square_hd, square, portrait_4_3, portrait_16_9, landscape_4_3, landscape_16_9');
-      }
-      if (options.num_inference_steps && (options.num_inference_steps < 1 || options.num_inference_steps > 50)) {
-        throw new Error('FAL.ai num_inference_steps must be between 1 and 50');
-      }
-      if (options.guidance_scale && (options.guidance_scale < 1 || options.guidance_scale > 20)) {
-        throw new Error('FAL.ai guidance_scale must be between 1 and 20');
-      }
-      break;
+  if (options.n && (options.n < 1 || options.n > 10)) {
+    throw new Error('n must be between 1 and 10');
   }
 };
 
-// Helper function to get default options for each provider
-export const getDefaultOptions = (provider: 'openai' | 'gemini' | 'falai' | 'ppqai'): Partial<ImageGenerationOptions> => {
-  switch (provider) {
-    case 'openai':
-      return {
-        size: '1024x1024',
-        quality: 'standard',
-        style: 'vivid',
-        n: 1,
-      };
-
-    case 'gemini':
-      return {
-        model: 'gemini-3-pro-image-preview',
-      };
-    // case 'gemini':
-    //   return {
-    //     model: 'gemini-2.5-flash-image',
-    //   }; // Don't remove that line yet
-
-    case 'falai':
-      return {
-        image_size: 'square_hd',
-        num_inference_steps: 20,
-        guidance_scale: 7.5,
-      };
-
-    case 'ppqai':
-      return {
-        model: 'nano-banana-pro',
-        n: 1,
-      };
-
-    default:
-      throw new Error(`No default options available for provider: ${provider}`);
-  }
+// Helper function to get default options
+export const getDefaultOptions = (): Partial<ImageGenerationOptions> => {
+  return {
+    model: 'nano-banana-pro',
+    n: 1,
+  };
 };
 
 // Helper function to merge user options with defaults
 export const mergeWithDefaults = (options: ImageGenerationOptions): ImageGenerationOptions => {
-  const defaults = getDefaultOptions(options.provider);
+  const defaults = getDefaultOptions();
   return { ...defaults, ...options };
 };

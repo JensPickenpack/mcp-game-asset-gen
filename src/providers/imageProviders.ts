@@ -2,9 +2,6 @@ import path from 'path';
 import {
   downloadAndSaveImage,
   encodeImageToBase64,
-  getFalAIKey,
-  getGeminiKey,
-  getOpenAIKey,
   getPPQAIKey,
   makeHTTPRequest,
   saveBase64Image,
@@ -12,304 +9,35 @@ import {
 
 // Export helper functions from imageHelpers for external use
 export {
-  generateImage, generateImageComparison, generateMultipleImages, getDefaultOptions,
+  generateImage, generateMultipleImages, getDefaultOptions,
   mergeWithDefaults, validateImageOptions, type ImageGenerationOptions
 } from './imageHelpers.js';
 
-// OpenAI Image Generation
-export const openaiGenerateImage = async (args: {
-  prompt: string;
-  outputPath: string;
-  inputImagePath?: string;
-  size?: "1024x1024" | "1792x1024" | "1024x1792";
-  quality?: "standard" | "hd";
-  style?: "vivid" | "natural";
-  n?: number;
-}): Promise<string> => {
-  const apiKey = getOpenAIKey();
-
-  // Determine if this is image generation or editing
-  const isEditing = !!args.inputImagePath;
-  let endpoint = "https://api.openai.com/v1/images/generations";
-  let body: any = {
-    prompt: args.prompt,
-    n: args.n || 1,
-    size: args.size || "1024x1024",
-  };
-
-  // For editing, use different endpoint and add image
-  if (isEditing && args.inputImagePath) {
-    endpoint = "https://api.openai.com/v1/images/edits";
-    const imageBase64 = encodeImageToBase64(args.inputImagePath);
-    body.image = imageBase64;
-  } else {
-    // For generation, use GPT image generation
-    body.model = "gpt-image-1";
-    // GPT image models don't support DALL-E specific parameters
-  }
-
-  const headers = {
-    "Authorization": `Bearer ${apiKey}`,
-    "Content-Type": "application/json"
-  };
-
-  const response = await makeHTTPRequest(endpoint, "POST", headers, body);
-
-  if (response.error) {
-    throw new Error(`OpenAI API error: ${response.error.message}`);
-  }
-
-  // Save generated images and collect file paths
-  const savedPaths: string[] = [];
-  const images = response.data || [];
-
-  for (let i = 0; i < images.length; i++) {
-    const image = images[i];
-    let outputPath = args.outputPath;
-
-    // If multiple images, add index to filename
-    if (images.length > 1) {
-      const ext = path.extname(outputPath) || '.png';
-      const baseName = path.basename(outputPath, ext);
-      const dir = path.dirname(outputPath);
-      outputPath = path.join(dir, `${baseName}_${i + 1}${ext}`);
-    }
-
-    // Download and save the image
-    if (image.url) {
-      await downloadAndSaveImage(image.url, outputPath);
-      savedPaths.push(outputPath);
-    } else if (image.b64_json) {
-      saveBase64Image(image.b64_json, outputPath);
-      savedPaths.push(outputPath);
-    }
-  }
-
-  return JSON.stringify({
-    provider: "OpenAI",
-    operation: isEditing ? "edit" : "generate",
-    savedPaths: savedPaths,
-    prompt_used: args.prompt,
-    parameters: body
-  });
-};
-
-// Gemini Native Image Generation with multi-image support
-export const geminiGenerateImage = async (args: {
-  prompt: string;
-  outputPath: string;
-  inputImagePaths?: string[];
-  model?: string;
-}): Promise<string> => {
-  const apiKey = getGeminiKey();
-
-  const model = args.model || "gemini-3-pro-image-preview";
-  // const model = args.model || "gemini-2.5-flash-image"; // Don't remove that line yet
-  const parts: any[] = [
-    {
-      text: args.prompt
-    }
-  ];
-
-  // Add input images if provided
-  if (args.inputImagePaths && args.inputImagePaths.length > 0) {
-    for (const imagePath of args.inputImagePaths) {
-      const imageBase64 = encodeImageToBase64(imagePath);
-      parts.push({
-        inlineData: {
-          mimeType: "image/png",
-          data: imageBase64
-        }
-      });
-    }
-  }
-
-  const body = {
-    contents: [
-      {
-        parts: parts
-      }
-    ]
-  };
-
-  const headers = {
-    "x-goog-api-key": apiKey,
-    "Content-Type": "application/json"
-  };
-
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-
-  const response = await makeHTTPRequest(endpoint, "POST", headers, body);
-
-  if (response.error) {
-    throw new Error(`Gemini API error: ${response.error.message || response.error}`);
-  }
-
-  // Process the response to extract image data
-  const savedPaths: string[] = [];
-
-  if (response.candidates && response.candidates.length > 0) {
-    const candidate = response.candidates[0];
-    if (candidate.content && candidate.content.parts) {
-      for (const part of candidate.content.parts) {
-        if (part.inlineData && part.inlineData.data) {
-          const imageData = part.inlineData.data;
-          saveBase64Image(imageData, args.outputPath);
-          savedPaths.push(args.outputPath);
-          break; // Take first image
-        }
-      }
-    }
-  }
-
-  if (savedPaths.length === 0) {
-    throw new Error("No image data received from Gemini API");
-  }
-
-  return JSON.stringify({
-    provider: "Google Gemini",
-    model: model,
-    savedPaths: savedPaths,
-    prompt_used: args.prompt,
-    input_images: args.inputImagePaths || [],
-    parameters: body
-  });
-};
-
-// FAL.ai Image Generation with Qwen models
-export const falaiGenerateImage = async (args: {
-  prompt: string;
-  outputPath: string;
-  image_size?: "square_hd" | "square" | "portrait_4_3" | "portrait_16_9" | "landscape_4_3" | "landscape_16_9";
-  num_inference_steps?: number;
-  guidance_scale?: number;
-}): Promise<string> => {
-  const apiKey = getFalAIKey();
-
-  const body = {
-    prompt: args.prompt,
-    image_size: args.image_size || "square_hd",
-    num_inference_steps: args.num_inference_steps || 20,
-    guidance_scale: args.guidance_scale || 7.5,
-    enable_safety_checker: true
-  };
-
-  const headers = {
-    "Authorization": `Key ${apiKey}`,
-    "Content-Type": "application/json"
-  };
-
-  const endpoint = "https://fal.run/fal-ai/qwen-image";
-
-  const response = await makeHTTPRequest(endpoint, "POST", headers, body);
-
-  if (response.error || response.detail) {
-    throw new Error(`FAL.ai API error: ${response.error?.message || JSON.stringify(response.detail || response.error)}`);
-  }
-
-  // Save generated image
-  const savedPaths: string[] = [];
-
-  if (response.images && response.images.length > 0) {
-    const image = response.images[0];
-    if (image.url) {
-      await downloadAndSaveImage(image.url, args.outputPath);
-      savedPaths.push(args.outputPath);
-    } else {
-      throw new Error("No image URL in FAL.ai response");
-    }
-  } else {
-    throw new Error("No images array in FAL.ai response");
-  }
-
-  return JSON.stringify({
-    provider: "FAL.ai",
-    model: "qwen-image",
-    savedPaths: savedPaths,
-    prompt_used: args.prompt,
-    seed: response.seed,
-    inference_time: response.timings?.inference,
-    parameters: body
-  });
-};
-
-// FAL.ai Image Editing with Qwen models
-export const falaiEditImage = async (args: {
-  prompt: string;
-  inputImagePath: string;
-  outputPath: string;
-  image_size?: "square_hd" | "square" | "portrait_4_3" | "portrait_16_9" | "landscape_4_3" | "landscape_16_9";
-  num_inference_steps?: number;
-  guidance_scale?: number;
-}): Promise<string> => {
-  const apiKey = getFalAIKey();
-
-  // For now, use base64 inline (we can optimize later with proper upload)
-  const imageBase64 = encodeImageToBase64(args.inputImagePath);
-
-  const body = {
-    prompt: args.prompt,
-    image_url: `data:image/png;base64,${imageBase64}`,
-    image_size: args.image_size || "square_hd",
-    num_inference_steps: args.num_inference_steps || 20,
-    guidance_scale: args.guidance_scale || 7.5,
-    enable_safety_checker: true
-  };
-
-  const headers = {
-    "Authorization": `Key ${apiKey}`,
-    "Content-Type": "application/json"
-  };
-
-  const endpoint = "https://fal.run/fal-ai/qwen-image-edit";
-
-  const response = await makeHTTPRequest(endpoint, "POST", headers, body);
-
-  if (response.error || response.detail) {
-    throw new Error(`FAL.ai API error: ${response.error?.message || JSON.stringify(response.detail || response.error)}`);
-  }
-
-  // Save edited image
-  const savedPaths: string[] = [];
-
-  if (response.images && response.images.length > 0) {
-    const image = response.images[0];
-    if (image.url) {
-      await downloadAndSaveImage(image.url, args.outputPath);
-      savedPaths.push(args.outputPath);
-    } else {
-      throw new Error("No image URL in FAL.ai edit response");
-    }
-  } else {
-    throw new Error("No images array in FAL.ai edit response");
-  }
-
-  return JSON.stringify({
-    provider: "FAL.ai",
-    model: "qwen-image-edit",
-    operation: "edit",
-    savedPaths: savedPaths,
-    prompt_used: args.prompt,
-    input_image: args.inputImagePath,
-    seed: response.seed,
-    inference_time: response.timings?.inference,
-    parameters: body
-  });
-};
-
-// PPQ.ai Image Generation (OpenAI-compatible proxy with many models)
+// PPQ.ai Image Generation (unified API with many models)
 export const ppqaiGenerateImage = async (args: {
   prompt: string;
   outputPath: string;
-  model?: "gpt-image-1" | "gpt-image-1.5" | "nano-banana-pro" | "flux-2-pro" | "flux-2-flex" | "flux-kontext-pro" | "flux-kontext-max";
+  model?: "gpt-image-1" | "gpt-image-1.5" | "nano-banana-pro" | "flux-2-pro" | "flux-2-flex" | "flux-2-pro-i2i" | "flux-kontext-pro" | "flux-kontext-max";
   quality?: string;
   n?: number;
   size?: string;
   image_url?: string;
+  inputImagePath?: string;
 }): Promise<string> => {
   const apiKey = getPPQAIKey();
 
-  const model = args.model || "nano-banana-pro";
+  // If inputImagePath is provided, convert to base64 data URI for image_url
+  let imageUrl = args.image_url;
+  if (!imageUrl && args.inputImagePath) {
+    const imageBase64 = encodeImageToBase64(args.inputImagePath);
+    imageUrl = `data:image/png;base64,${imageBase64}`;
+  }
+
+  // Auto-select i2i model if image input is provided and no model specified
+  let model = args.model || "nano-banana-pro";
+  if (imageUrl && !args.model) {
+    model = "flux-kontext-pro";
+  }
 
   const body: any = {
     model: model,
@@ -325,8 +53,8 @@ export const ppqaiGenerateImage = async (args: {
     body.size = args.size;
   }
 
-  if (args.image_url) {
-    body.image_url = args.image_url;
+  if (imageUrl) {
+    body.image_url = imageUrl;
   }
 
   const headers = {
@@ -374,29 +102,11 @@ export const ppqaiGenerateImage = async (args: {
   return JSON.stringify({
     provider: "PPQ.ai",
     model: model,
-    operation: "generate",
+    operation: imageUrl ? "image-to-image" : "generate",
     savedPaths: savedPaths,
     prompt_used: args.prompt,
     cost: response.cost,
     parameters: body
-  });
-};
-
-// Helper functions for different providers (deprecated - use imageHelpers instead)
-export const generateWithProvider = async (
-  provider: "openai" | "gemini" | "falai" | "ppqai",
-  prompt: string,
-  outputPath: string,
-  inputImagePaths?: string[]
-): Promise<string> => {
-  // Import the new helper function
-  const { generateImage } = await import('./imageHelpers.js');
-
-  return await generateImage({
-    provider,
-    prompt,
-    outputPath,
-    inputImagePaths,
   });
 };
 
@@ -405,12 +115,11 @@ export const generateCharacterSheet = async (args: {
   characterDescription: string;
   outputPath: string;
   referenceImagePaths?: string[];
-  model?: "openai" | "gemini" | "falai";
+  model?: string;
   style?: string;
   includeExpressions?: boolean;
   includePoses?: boolean;
 }): Promise<string> => {
-  const model = args.model || "gemini";
   const style = args.style || "detailed digital art";
 
   // Build comprehensive character sheet prompt
@@ -433,14 +142,13 @@ export const generateCharacterSheet = async (args: {
   }
 
   try {
-    // Import the new helper function
     const { generateImage } = await import('./imageHelpers.js');
 
     const result = await generateImage({
-      provider: model,
       prompt,
       outputPath: args.outputPath,
       inputImagePaths: args.referenceImagePaths,
+      model: args.model || 'flux-kontext-pro',
     });
 
     const parsedResult = JSON.parse(result);
@@ -467,9 +175,8 @@ export const generateCharacterVariation = async (args: {
   prompt: string;
   outputPath: string;
   referenceImagePaths: string[];
-  model?: "openai" | "gemini" | "falai";
+  model?: string;
 }): Promise<string> => {
-  const model = args.model || "gemini";
 
   if (!args.referenceImagePaths || args.referenceImagePaths.length === 0) {
     throw new Error("At least one reference image is required for character variation");
@@ -480,14 +187,13 @@ export const generateCharacterVariation = async (args: {
   prompt += "High quality digital artwork with consistent lighting and style.";
 
   try {
-    // Import the new helper function
     const { generateImage } = await import('./imageHelpers.js');
 
     const result = await generateImage({
-      provider: model,
       prompt,
       outputPath: args.outputPath,
       inputImagePaths: args.referenceImagePaths,
+      model: args.model || 'flux-kontext-pro',
     });
 
     const parsedResult = JSON.parse(result);
@@ -510,12 +216,11 @@ export const generatePixelArtCharacter = async (args: {
   outputPath: string;
   pixelDimensions: "8x8" | "16x16" | "32x32" | "48x48" | "64x64" | "96x96";
   spriteSheet?: boolean;
-  model?: "openai" | "gemini" | "falai";
+  model?: string;
   colors?: number;
   transparentBackground?: boolean;
   backgroundColor?: 'white' | 'black' | 'auto';
 }): Promise<string> => {
-  const model = args.model || "falai";
   const targetSize = parseInt(args.pixelDimensions.split('x')[0]);
 
   // Note: AI models may not generate accurate small pixel art directly
@@ -543,20 +248,18 @@ export const generatePixelArtCharacter = async (args: {
   prompt += "Sharp pixel boundaries, retro gaming aesthetic, solid colors.";
 
   try {
-    // Import the new helper function
     const { generateImage } = await import('./imageHelpers.js');
 
-    // Generate at higher resolution first
     const tempPath = args.outputPath.replace(/\.[^.]+$/, '_temp_256px.png');
 
     const result = await generateImage({
-      provider: model,
       prompt,
       outputPath: tempPath,
+      model: args.model || 'nano-banana-pro',
       transparentBackground: args.transparentBackground,
       backgroundColor: args.backgroundColor,
-      transparencyTolerance: 20, // Lower tolerance for cleaner pixel art edges
-      transparencyBlur: 0, // No blur for pixel art
+      transparencyTolerance: 20,
+      transparencyBlur: 0,
     });
 
     const parsedResult = JSON.parse(result);
@@ -591,13 +294,12 @@ export const generateTexture = async (args: {
   outputPath: string;
   textureSize?: "512x512" | "1024x1024" | "2048x2048";
   seamless?: boolean;
-  model?: "openai" | "gemini" | "falai";
+  model?: string;
   materialType?: "diffuse" | "normal" | "roughness" | "displacement";
   transparentBackground?: boolean;
   backgroundColor?: 'white' | 'black' | 'auto';
   transparencyTolerance?: number;
 }): Promise<string> => {
-  const model = args.model || "falai";
   const textureSize = args.textureSize || "1024x1024";
   const materialType = args.materialType || "diffuse";
 
@@ -642,17 +344,16 @@ export const generateTexture = async (args: {
   prompt += ".";
 
   try {
-    // Import the new helper function
     const { generateImage } = await import('./imageHelpers.js');
 
     const result = await generateImage({
-      provider: model,
       prompt,
       outputPath: args.outputPath,
+      model: args.model || 'nano-banana-pro',
       transparentBackground: args.transparentBackground,
       backgroundColor: args.backgroundColor,
       transparencyTolerance: args.transparencyTolerance,
-      transparencyBlur: 1, // Slight blur for smoother edges
+      transparencyBlur: 1,
     });
 
     const parsedResult = JSON.parse(result);
@@ -683,17 +384,15 @@ export const generateObjectSheet = async (args: {
   objectDescription: string;
   outputBasePath: string;
   viewpoints?: ("front" | "back" | "left" | "right" | "top" | "bottom" | "perspective")[];
-  model?: "openai" | "gemini" | "falai";
+  model?: string;
   style?: string;
 }): Promise<string> => {
-  const model = args.model || "gemini";
   const viewpoints = args.viewpoints || ["front", "back", "left", "right", "top", "perspective"];
   const style = args.style || "clean concept art";
 
   const results: any[] = [];
   const savedPaths: string[] = [];
 
-  // Import the new helper function
   const { generateImage } = await import('./imageHelpers.js');
 
   for (const viewpoint of viewpoints) {
@@ -731,9 +430,9 @@ export const generateObjectSheet = async (args: {
 
     try {
       const result = await generateImage({
-        provider: model,
         prompt,
         outputPath,
+        model: args.model || 'nano-banana-pro',
       });
 
       const parsedResult = JSON.parse(result);
@@ -759,7 +458,7 @@ export const generateObjectSheet = async (args: {
     viewpoints_generated: results.filter(r => !r.error).length,
     saved_paths: savedPaths,
     style: style,
-    provider: model,
+    provider: "PPQ.ai",
     results: results,
     usage_note: "Use these reference images for 3D modeling. Import into Blender/Maya as reference planes."
   });

@@ -17,6 +17,7 @@ When adding new features, always ask: "Will this help users succeed without need
 ## Development Workflow
 
 ### Testing
+
 - Run unit tests with `npm test` (uses `vitest run` for non-watch mode, mocked providers)
 - Run integration tests with `npm run test:integration` (calls real APIs, requires API keys, keeps generated images)
 - Run integration tests with cleanup: `npm run test:integration:cleanup` (calls real APIs and deletes test images)
@@ -30,16 +31,19 @@ When adding new features, always ask: "Will this help users succeed without need
 - Set `CLEANUP_TEST_FILES=true` to delete generated test images after integration tests
 
 ### Type Checking
+
 - Always run `npm run typecheck` before committing
 - TypeScript configuration is in `tsconfig.json`
 - Strict mode is enabled
 
 ### Building
+
 - Build with `npm run build` (compiles to `dist/`)
 - Development mode: `npm run dev` (builds and starts)
 - Production: `npm run start` (runs from `dist/`)
 
 ### Linting
+
 - Run `npm run lint` to check code style
 - ESLint configuration for TypeScript
 
@@ -70,11 +74,12 @@ src/
 ## Environment Variables
 
 Required environment variables:
-- `OPENAI_API_KEY` - OpenAI API key for image generation
-- `GEMINI_API_KEY` - Google Gemini API key for image generation and reference image generation
-- `FAL_AI_API_KEY` - FAL.ai API key for image generation and 3D model generation
+
+- `PPQ_API_KEY` - PPQ.ai API key for image, video and audio generation
+- `FAL_AI_API_KEY` - FAL.ai API key for 3D model generation
 
 Optional environment variables:
+
 - `ALLOWED_TOOLS` - Comma-separated list of tools to make available (default: all tools)
 - `CLEANUP_TEST_FILES` - Set to 'true' to delete test images after integration tests (default: false)
 
@@ -89,16 +94,19 @@ Optional environment variables:
 ## 3D Model Generation
 
 ### Supported Models
+
 - **Trellis** (FAL.ai): Single and multi-image variants
 - **Hunyuan3D 2.0** (FAL.ai): Single, multi, single-turbo, and multi-turbo variants
 
 ### Features
-- **Automatic Reference Generation**: When only text prompt is provided, automatically generates reference images using Gemini
+
+- **Automatic Reference Generation**: When only a text prompt is provided, automatically generates reference images using PPQ.ai (prefer image-to-image models such as `flux-kontext-pro` or `flux-2-pro-i2i` for subsequent views to preserve consistency)
 - **Base64 URI Support**: Default input format for images
 - **Smart Variant Selection**: Automatically chooses single vs multi based on input image count
 - **GLB/GLTF Output**: Web and game engine compatible 3D formats
 
 ### Implementation Details
+
 - Core functions in `src/utils/model3dUtils.ts`
 - Helper functions with automatic reference generation in `src/providers/model3dHelpers.ts`
 - Tool schemas and handlers in `src/index.ts`
@@ -109,12 +117,14 @@ Optional environment variables:
 **Problem**: Generating different objects for different views creates unusable 3D models.
 
 **Solution**: The `generateReferenceImages()` function ensures consistency by:
+
 1. **First View**: Generated from text prompt (usually front view)
 2. **Subsequent Views**: Use previous image(s) as input with modified prompts
 3. **View Ordering**: Always generates front view first for consistency
 4. **Prompt Engineering**: Uses "Create a [view] view of the same object, maintaining exact consistency"
 
 **Implementation Requirements**:
+
 - Never generate multiple views independently from text prompts
 - Always use image-to-image generation for subsequent views
 - Maintain sharp, high-quality prompts with specific camera models

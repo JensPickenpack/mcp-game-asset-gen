@@ -97,7 +97,7 @@ import { unlinkSync, writeFileSync, readFileSync, existsSync } from 'fs';
 // Enhanced 3D generation options with automatic reference image support
 export interface Model3DGenerationOptionsExtended extends Model3DGenerationOptions {
   autoGenerateReferences?: boolean;
-  referenceModel?: 'openai' | 'gemini' | 'falai';
+  referenceModel?: 'ppqai';
   referenceViews?: ('front' | 'back' | 'top' | 'left' | 'right')[];
   cleanupReferences?: boolean;
 }
@@ -107,7 +107,7 @@ export const generateReferenceImages = async (
   prompt: string,
   outputBasePath: string,
   views: ('front' | 'back' | 'top' | 'left' | 'right')[] = ['front', 'back', 'top'],
-  model: 'openai' | 'gemini' | 'falai' = 'gemini'
+  model: string = 'nano-banana-pro'
 ): Promise<string[]> => {
   const referencePaths: string[] = [];
   
@@ -153,11 +153,10 @@ export const generateReferenceImages = async (
         }
         
         result = await generateImage({
-          provider: model,
           prompt: viewPrompt,
           outputPath,
-          size: model === 'openai' ? '1024x1024' : undefined,
-          image_size: model === 'falai' ? 'square_hd' : undefined,
+          model: model,
+          size: '1024x1024',
         });
       } else {
         // Subsequent views: use previous image(s) as input for consistency
@@ -189,12 +188,11 @@ export const generateReferenceImages = async (
         }
         
         result = await generateImage({
-          provider: model,
           prompt: viewPrompt,
           outputPath,
-          inputImagePaths,
-          size: model === 'openai' ? '1024x1024' : undefined,
-          image_size: model === 'falai' ? 'square_hd' : undefined,
+          inputImagePaths: inputImagePaths,
+          model: model,
+          size: '1024x1024',
         });
       }
       
@@ -262,7 +260,7 @@ export const generate3DModel = async (
     variant,
     format = 'glb',
     autoGenerateReferences = true,
-    referenceModel = 'gemini',
+    referenceModel = 'ppqai',
     referenceViews = ['front', 'back', 'top'],
     cleanupReferences = true,
   } = options;
@@ -280,7 +278,7 @@ export const generate3DModel = async (
         prompt,
         outputBasePath,
         (variant && variant.includes('multi')) ? referenceViews : ['front'],
-        referenceModel
+        'nano-banana-pro'
       );
       
       finalInputPaths = generatedReferences;
@@ -410,7 +408,7 @@ export const generate3DModelAsync = async (
     variant,
     format = 'glb',
     autoGenerateReferences = true,
-    referenceModel = 'gemini',
+    referenceModel = 'ppqai',
     referenceViews = ['front', 'back', 'top'],
     cleanupReferences = true,
   } = options;
@@ -458,7 +456,7 @@ export const generate3DModelAsync = async (
           prompt,
           outputBasePath,
           (variant && variant.includes('multi')) ? referenceViews : ['front'],
-          referenceModel
+          'nano-banana-pro'
         );
         
         finalInputPaths = generatedReferences;
@@ -658,7 +656,7 @@ export const getDefault3DOptions = (model: Model3DModel): Partial<Model3DGenerat
   const baseDefaults = {
     format: Model3DFormat.GLB,
     autoGenerateReferences: true,
-    referenceModel: 'gemini' as const,
+    referenceModel: 'ppqai' as const,
     referenceViews: ['front', 'back', 'top'] as ('front' | 'back' | 'top')[],
     cleanupReferences: true,
   };
