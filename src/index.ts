@@ -8,6 +8,13 @@ import {
   ListPromptsRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import { writeFileSync } from 'fs';
+import path from 'path';
+import {
+  ppqaiTextToSpeech,
+  ppqaiTranscribeAudio,
+  TTS_VOICES,
+} from './providers/audioHelpers.js';
 import {
   generateCharacterSheet,
   generateCharacterVariation,
@@ -23,19 +30,10 @@ import {
   Model3DVariant
 } from './providers/model3dHelpers.js';
 import {
-  ppqaiGenerateVideoAsync,
   ALL_VIDEO_MODELS,
-  VIDEO_MODELS_T2V,
-  VIDEO_MODELS_I2V,
+  ppqaiGenerateVideoAsync
 } from './providers/videoHelpers.js';
-import {
-  ppqaiTextToSpeech,
-  ppqaiTranscribeAudio,
-  TTS_VOICES,
-} from './providers/audioHelpers.js';
 import { getPPQAIKey, makeHTTPRequest } from './utils/imageUtils.js';
-import { writeFileSync } from 'fs';
-import path from 'path';
 
 // Check environment variables for tool filtering
 const allowedToolsEnv = process.env.ALLOWED_TOOLS;
@@ -83,12 +81,12 @@ async function fetchPPQModels() {
 }
 
 const TOOL_PROMPT_PREFIX: Record<string, string> = {
-  general:         'game-ready asset, clean lines, flat colors, no text, no watermarks, optimized for Unity/Unreal, transparent background where useful, consistent lighting, high contrast for readability',
-  pixel_art:       '16x16 pixel art sprite, retro 8-bit game style, side view idle animation, limited color palette (64 colors), sharp pixels, transparent background where useful; provide one version with solid white background for reference',
-  texture:         'seamless tileable 1024x1024 PBR texture, game environment material, diffuse + normal map compatible, highly detailed but low frequency for performance (optimized for runtime)',
+  general: 'game-ready asset, clean lines, flat colors, no text, no watermarks, optimized for Unity/Unreal, transparent background where useful, consistent lighting, high contrast for readability',
+  pixel_art: '16x16 pixel art sprite, retro 8-bit game style, side view idle animation, limited color palette (64 colors), sharp pixels, transparent background where useful; provide one version with solid white background for reference',
+  texture: 'seamless tileable 1024x1024 PBR texture, game environment material, diffuse + normal map compatible, highly detailed but low frequency for performance (optimized for runtime)',
   character_sheet: 'full character reference sheet, front / side / back / three-quarter views, consistent proportions and color palette, clean line art, transparent background where useful',
-  video:           'smooth 8-frame loop animation (sprite), pixel art style, 16x16 sprite scaled to video, retro game camera, no motion blur, perfect loop, transparent background where useful',
-  reference_3d:    'multi-view reference for 3D modeling, sharp edges, fine details, flat studio lighting, white background, consistent object across all views',
+  video: 'smooth 8-frame loop animation (sprite), pixel art style, 16x16 sprite scaled to video, retro game camera, no motion blur, perfect loop, transparent background where useful',
+  reference_3d: 'multi-view reference for 3D modeling, sharp edges, fine details, flat studio lighting, white background, consistent object across all views',
 };
 
 function buildGamePrompt(toolType: keyof typeof TOOL_PROMPT_PREFIX, userPrompt: string, model?: string): string {
@@ -100,7 +98,7 @@ function buildGamePrompt(toolType: keyof typeof TOOL_PROMPT_PREFIX, userPrompt: 
   return parts.join(' | ');
 }
 
-function selectModelForTool(toolKey: 'image'|'pixel_art'|'texture'|'character_sheet'|'video'|'object_sheet') {
+function selectModelForTool(toolKey: 'image' | 'pixel_art' | 'texture' | 'character_sheet' | 'video' | 'object_sheet') {
   const imgs = availableModels.images || [];
   const vids = availableModels.videos || [];
 
@@ -860,3 +858,4 @@ main().catch((error) => {
 });
 
 export { allTools };
+

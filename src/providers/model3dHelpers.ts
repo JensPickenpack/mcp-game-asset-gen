@@ -1,27 +1,28 @@
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
+import path from 'path';
 import {
-  trellisGenerate3DSingle,
-  trellisGenerate3DMulti,
-  hunyuan3DGenerateSingle,
+  AVAILABLE_VARIANTS,
+  DEFAULT_VARIANTS,
   hunyuan3DGenerateMulti,
-  hunyuan3DGenerateSingleTurbo,
   hunyuan3DGenerateMultiTurbo,
+  hunyuan3DGenerateSingle,
+  hunyuan3DGenerateSingleTurbo,
   hunyuanWorldGenerate3D,
+  Model3DFormat,
   type Model3DGenerationOptions,
   type Model3DGenerationResult,
   Model3DModel,
   Model3DVariant,
-  Model3DFormat,
-  AVAILABLE_VARIANTS,
-  DEFAULT_VARIANTS,
+  trellisGenerate3DMulti,
+  trellisGenerate3DSingle,
 } from '../utils/model3dUtils.js';
+import { generateImage } from './imageHelpers.js';
 
 // Re-export enums for use in other modules
 export {
-  Model3DModel,
-  Model3DVariant,
-  Model3DFormat,
   AVAILABLE_VARIANTS,
-  DEFAULT_VARIANTS,
+  DEFAULT_VARIANTS, Model3DFormat, Model3DModel,
+  Model3DVariant
 };
 
 // Status file interface for background processing
@@ -41,7 +42,7 @@ export interface Model3DGenerationStatus {
 export const updateStatusFile = (statusPath: string, status: Partial<Model3DGenerationStatus>) => {
   try {
     let currentStatus: Model3DGenerationStatus;
-    
+
     if (existsSync(statusPath)) {
       const data = readFileSync(statusPath, 'utf8');
       currentStatus = JSON.parse(data);
@@ -55,10 +56,10 @@ export const updateStatusFile = (statusPath: string, status: Partial<Model3DGene
         logs: []
       };
     }
-    
+
     // Update with new status
     Object.assign(currentStatus, status);
-    
+
     writeFileSync(statusPath, JSON.stringify(currentStatus, null, 2));
   } catch (error) {
     console.warn(`Failed to update status file ${statusPath}:`, error);
@@ -69,7 +70,7 @@ export const updateStatusFile = (statusPath: string, status: Partial<Model3DGene
 export const addLogToStatus = (statusPath: string, message: string) => {
   try {
     let currentStatus: Model3DGenerationStatus;
-    
+
     if (existsSync(statusPath)) {
       const data = readFileSync(statusPath, 'utf8');
       currentStatus = JSON.parse(data);
@@ -83,16 +84,13 @@ export const addLogToStatus = (statusPath: string, message: string) => {
         logs: []
       };
     }
-    
+
     currentStatus.logs.push(`[${new Date().toISOString()}] ${message}`);
     writeFileSync(statusPath, JSON.stringify(currentStatus, null, 2));
   } catch (error) {
     console.warn(`Failed to add log to status file ${statusPath}:`, error);
   }
 };
-import { generateImage } from './imageHelpers.js';
-import path from 'path';
-import { unlinkSync, writeFileSync, readFileSync, existsSync } from 'fs';
 
 // Enhanced 3D generation options with automatic reference image support
 export interface Model3DGenerationOptionsExtended extends Model3DGenerationOptions {
@@ -110,21 +108,21 @@ export const generateReferenceImages = async (
   model: string = 'nano-banana-pro'
 ): Promise<string[]> => {
   const referencePaths: string[] = [];
-  
+
   // Sort views to ensure front is generated first for consistency
   const sortedViews = [...views].sort((a, b) => {
     if (a === 'front') return -1;
     if (b === 'front') return 1;
     return 0;
   });
-  
+
   for (let i = 0; i < sortedViews.length; i++) {
     const view = sortedViews[i];
     const outputPath = outputBasePath.replace(/\.[^.]+$/, `_ref_${view}.png`);
-    
+
     try {
       let result;
-      
+
       if (i === 0) {
         // First view: generate from text prompt
         let viewPrompt = `${prompt}, ${view} view, `;
@@ -133,7 +131,7 @@ export const generateReferenceImages = async (
         viewPrompt += 'highly detailed, crisp details, sharp focus, ';
         viewPrompt += 'shot on Sony A7R IV with 85mm f/1.4 lens, ';
         viewPrompt += 'professional product photography, suitable for 3D reconstruction';
-        
+
         switch (view) {
           case 'front':
             viewPrompt += ', front-facing view showing main features and proportions, sharp edges, fine details';
@@ -151,7 +149,7 @@ export const generateReferenceImages = async (
             viewPrompt += ', right side profile showing opposite side details, sharp edges, fine details';
             break;
         }
-        
+
         result = await generateImage({
           prompt: viewPrompt,
           outputPath,
@@ -161,14 +159,14 @@ export const generateReferenceImages = async (
       } else {
         // Subsequent views: use previous image(s) as input for consistency
         const inputImagePaths = referencePaths.slice(); // Use all previously generated images
-        
+
         let viewPrompt = `Create a ${view} view of the same object, maintaining exact consistency `;
         viewPrompt += 'with the provided image(s). Sharp technical reference image, clean white background, ';
         viewPrompt += 'professional 3D modeling reference, consistent lighting, ';
         viewPrompt += 'highly detailed, crisp details, sharp focus, ';
         viewPrompt += 'shot on Sony A7R IV with 85mm f/1.4 lens, ';
         viewPrompt += 'professional product photography, suitable for 3D reconstruction';
-        
+
         switch (view) {
           case 'front':
             viewPrompt += ', front-facing view showing main features and proportions, sharp edges, fine details';
@@ -186,7 +184,7 @@ export const generateReferenceImages = async (
             viewPrompt += ', right side profile showing opposite side details, sharp edges, fine details';
             break;
         }
-        
+
         result = await generateImage({
           prompt: viewPrompt,
           outputPath,
@@ -195,7 +193,7 @@ export const generateReferenceImages = async (
           size: '1024x1024',
         });
       }
-      
+
       const parsedResult = JSON.parse(result);
       if (parsedResult.savedPaths && parsedResult.savedPaths.length > 0) {
         referencePaths.push(...parsedResult.savedPaths);
@@ -205,7 +203,7 @@ export const generateReferenceImages = async (
       // Continue with other views even if one fails
     }
   }
-  
+
   return referencePaths;
 };
 
@@ -238,13 +236,13 @@ export const validateAndGetVariant = (
   if (!variant) {
     return DEFAULT_VARIANTS[model];
   }
-  
+
   const availableVariants = AVAILABLE_VARIANTS[model];
   if (!availableVariants.includes(variant as any)) {
     console.warn(`Variant ${variant} not available for model ${model}. Using default: ${DEFAULT_VARIANTS[model]}`);
     return DEFAULT_VARIANTS[model];
   }
-  
+
   return variant;
 };
 
@@ -264,15 +262,15 @@ export const generate3DModel = async (
     referenceViews = ['front', 'back', 'top'],
     cleanupReferences = true,
   } = options;
-  
+
   let finalInputPaths = [...inputImagePaths];
   let generatedReferences: string[] = [];
-  
+
   try {
     // If no input images provided, generate reference images automatically
     if (finalInputPaths.length === 0 && prompt && autoGenerateReferences) {
       console.log('No input images provided, generating reference images automatically...');
-      
+
       const outputBasePath = outputPath.replace(/\.[^.]+$/, '');
       generatedReferences = await generateReferenceImages(
         prompt,
@@ -280,25 +278,25 @@ export const generate3DModel = async (
         (variant && variant.includes('multi')) ? referenceViews : ['front'],
         'nano-banana-pro'
       );
-      
+
       finalInputPaths = generatedReferences;
-      
+
       if (generatedReferences.length === 0) {
         throw new Error('Failed to generate reference images automatically');
       }
     }
-    
+
     // Validate that we have input images
     if (finalInputPaths.length === 0) {
       throw new Error('At least one input image is required for 3D model generation');
     }
-    
+
     // Determine the actual variant to use based on input count
     const actualVariant = variant || selectModelVariant(model, finalInputPaths.length);
-    
+
     // Call the appropriate 3D generation function
     let result: Model3DGenerationResult;
-    
+
     switch (model) {
       case 'trellis':
         if (actualVariant === 'single') {
@@ -317,7 +315,7 @@ export const generate3DModel = async (
           });
         }
         break;
-        
+
       case 'hunyuan3d':
         switch (actualVariant) {
           case 'single':
@@ -356,7 +354,7 @@ export const generate3DModel = async (
             throw new Error(`Unsupported Hunyuan3D variant: ${actualVariant}`);
         }
         break;
-        
+
       case 'hunyuan-world':
         // Hunyuan World only supports single image input
         result = await hunyuanWorldGenerate3D({
@@ -366,20 +364,20 @@ export const generate3DModel = async (
           format,
         });
         break;
-        
+
       default:
         throw new Error(`Unsupported 3D model: ${model}`);
     }
-    
+
     // Add metadata about automatic reference generation
     if (generatedReferences.length > 0) {
       result.auto_generated_references = generatedReferences;
       result.reference_model_used = referenceModel;
       result.reference_views_generated = referenceViews;
     }
-    
+
     return result;
-    
+
   } finally {
     // Clean up generated reference images if requested
     if (cleanupReferences && generatedReferences.length > 0) {
@@ -412,45 +410,45 @@ export const generate3DModelAsync = async (
     referenceViews = ['front', 'back', 'top'],
     cleanupReferences = true,
   } = options;
-  
+
   // Initialize status file
   updateStatusFile(statusPath, {
     status: 'pending',
     progress: 0,
     message: 'Initializing 3D model generation...',
   });
-  
+
   // Start processing in background
   (async () => {
     let finalInputPaths = [...inputImagePaths];
     let generatedReferences: string[] = [];
-    
+
     try {
       updateStatusFile(statusPath, {
         status: 'processing',
         progress: 5,
         message: 'Validating options and preparing inputs...',
       });
-      
+
       addLogToStatus(statusPath, `Starting 3D generation with model: ${model}, variant: ${variant}`);
-      
+
       // Validate options
       validate3DModelOptions(options);
-      
+
       updateStatusFile(statusPath, {
         progress: 10,
         message: 'Checking input images...',
       });
-      
+
       // If no input images provided, generate reference images automatically
       if (finalInputPaths.length === 0 && prompt && autoGenerateReferences) {
         addLogToStatus(statusPath, 'No input images provided, generating reference images automatically...');
-        
+
         updateStatusFile(statusPath, {
           progress: 20,
           message: 'Generating reference images...',
         });
-        
+
         const outputBasePath = outputPath.replace(/\.[^.]+$/, '');
         generatedReferences = await generateReferenceImages(
           prompt,
@@ -458,29 +456,29 @@ export const generate3DModelAsync = async (
           (variant && variant.includes('multi')) ? referenceViews : ['front'],
           'nano-banana-pro'
         );
-        
+
         finalInputPaths = generatedReferences;
         addLogToStatus(statusPath, `Generated ${generatedReferences.length} reference images`);
       }
-      
+
       updateStatusFile(statusPath, {
         progress: 30,
         message: 'Preparing 3D generation request...',
       });
-      
+
       // Determine the actual variant to use based on input count
       const actualVariant = variant || selectModelVariant(model, finalInputPaths.length);
-      
+
       addLogToStatus(statusPath, `Using variant: ${actualVariant} with ${finalInputPaths.length} input images`);
-      
+
       // Call the appropriate 3D generation function
       let result: Model3DGenerationResult;
-      
+
       updateStatusFile(statusPath, {
         progress: 40,
         message: `Calling ${model} ${actualVariant} API...`,
       });
-      
+
       switch (model) {
         case 'trellis':
           if (actualVariant === 'single') {
@@ -499,13 +497,13 @@ export const generate3DModelAsync = async (
             });
           }
           break;
-          
+
         case 'hunyuan3d':
           updateStatusFile(statusPath, {
             progress: 50,
             message: 'Processing with Hunyuan3D...',
           });
-          
+
           switch (actualVariant) {
             case 'single':
               result = await hunyuan3DGenerateSingle({
@@ -543,13 +541,13 @@ export const generate3DModelAsync = async (
               throw new Error(`Unsupported Hunyuan3D variant: ${actualVariant}`);
           }
           break;
-          
+
         case 'hunyuan-world':
           updateStatusFile(statusPath, {
             progress: 50,
             message: 'Processing with Hunyuan World...',
           });
-          
+
           // Hunyuan World only supports single image input
           result = await hunyuanWorldGenerate3D({
             prompt,
@@ -558,23 +556,23 @@ export const generate3DModelAsync = async (
             format,
           });
           break;
-          
+
         default:
           throw new Error(`Unsupported 3D model: ${model}`);
       }
-      
+
       updateStatusFile(statusPath, {
         progress: 90,
         message: 'Finalizing result...',
       });
-      
+
       // Add metadata about automatic reference generation
       if (generatedReferences.length > 0) {
         result.auto_generated_references = generatedReferences;
         result.reference_model_used = referenceModel;
         result.reference_views_generated = referenceViews;
       }
-      
+
       updateStatusFile(statusPath, {
         status: 'completed',
         progress: 100,
@@ -582,12 +580,12 @@ export const generate3DModelAsync = async (
         endTime: new Date().toISOString(),
         result,
       });
-      
+
       addLogToStatus(statusPath, '3D model generation completed successfully');
-      
+
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      
+
       updateStatusFile(statusPath, {
         status: 'failed',
         progress: 0,
@@ -595,9 +593,9 @@ export const generate3DModelAsync = async (
         endTime: new Date().toISOString(),
         error: errorMessage,
       });
-      
+
       addLogToStatus(statusPath, `ERROR: ${errorMessage}`);
-      
+
     } finally {
       // Clean up generated reference images if requested
       if (cleanupReferences && generatedReferences.length > 0) {
@@ -613,7 +611,7 @@ export const generate3DModelAsync = async (
       }
     }
   })();
-  
+
   // Immediately return the status file path
   return { statusPath };
 };
@@ -623,28 +621,28 @@ export const validate3DModelOptions = (options: Model3DGenerationOptionsExtended
   if (!options.outputPath || options.outputPath.trim().length === 0) {
     throw new Error('Output path is required and cannot be empty');
   }
-  
+
   if (!['trellis', 'hunyuan3d', 'hunyuan-world'].includes(options.model)) {
     throw new Error('Model must be one of: trellis, hunyuan3d, hunyuan-world');
   }
-  
+
   if (options.variant && !['single', 'multi', 'single-turbo', 'multi-turbo'].includes(options.variant)) {
     throw new Error('Variant must be one of: single, multi, single-turbo, multi-turbo');
   }
-  
+
   if (options.format && !['glb', 'gltf'].includes(options.format)) {
     throw new Error('Format must be one of: glb, gltf');
   }
-  
+
   // Validate variant compatibility with model
   if (options.model === 'trellis' && options.variant?.includes('turbo')) {
     throw new Error('Trellis model does not support turbo variants');
   }
-  
+
   if (options.model === 'hunyuan-world' && options.variant !== 'single') {
     throw new Error('Hunyuan World model only supports single variant');
   }
-  
+
   // If no input images and no prompt, validation fails
   if ((!options.inputImagePaths || options.inputImagePaths.length === 0) && !options.prompt) {
     throw new Error('Either input images or a prompt is required for 3D model generation');
@@ -660,7 +658,7 @@ export const getDefault3DOptions = (model: Model3DModel): Partial<Model3DGenerat
     referenceViews: ['front', 'back', 'top'] as ('front' | 'back' | 'top')[],
     cleanupReferences: true,
   };
-  
+
   switch (model) {
     case Model3DModel.TRELLIS:
       return {
@@ -668,21 +666,21 @@ export const getDefault3DOptions = (model: Model3DModel): Partial<Model3DGenerat
         model: Model3DModel.TRELLIS,
         variant: Model3DVariant.MULTI, // Prefer multi for better quality
       };
-      
+
     case Model3DModel.HUNYUAN3D:
       return {
         ...baseDefaults,
         model: Model3DModel.HUNYUAN3D,
         variant: Model3DVariant.MULTI, // Prefer multi for better quality
       };
-      
+
     case Model3DModel.HUNYUAN_WORLD:
       return {
         ...baseDefaults,
         model: Model3DModel.HUNYUAN_WORLD,
         variant: Model3DVariant.SINGLE, // Only supports single
       };
-      
+
     default:
       throw new Error(`No default options available for model: ${model}`);
   }
@@ -708,8 +706,8 @@ export const generate3DModelSmart = async (
     variant: Model3DVariant.MULTI, // Ensure variant is always set
     ...options,
   });
-  
+
   validate3DModelOptions(fullOptions);
-  
+
   return await generate3DModel(fullOptions);
 };
