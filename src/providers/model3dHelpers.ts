@@ -105,7 +105,7 @@ export const generateReferenceImages = async (
   prompt: string,
   outputBasePath: string,
   views: ('front' | 'back' | 'top' | 'left' | 'right')[] = ['front', 'back', 'top'],
-  model: string = 'nano-banana-pro'
+  model: string = 'gpt-image-1.5'
 ): Promise<string[]> => {
   const referencePaths: string[] = [];
 
@@ -276,7 +276,7 @@ export const generate3DModel = async (
         prompt,
         outputBasePath,
         (variant && variant.includes('multi')) ? referenceViews : ['front'],
-        'nano-banana-pro'
+        'gpt-image-1.5'
       );
 
       finalInputPaths = generatedReferences;
@@ -454,7 +454,7 @@ export const generate3DModelAsync = async (
           prompt,
           outputBasePath,
           (variant && variant.includes('multi')) ? referenceViews : ['front'],
-          'nano-banana-pro'
+          'gpt-image-1.5'
         );
 
         finalInputPaths = generatedReferences;

@@ -13,11 +13,11 @@ import path from 'path';
 import {
   ppqaiTextToSpeech,
   ppqaiTranscribeAudio,
+  TTS_MODELS,
   TTS_VOICES,
 } from './providers/audioHelpers.js';
 import {
   generateCharacterSheet,
-  generateCharacterVariation,
   generateObjectSheet,
   generatePixelArtCharacter,
   generateTexture,
@@ -42,7 +42,6 @@ const allowedToolsEnv = process.env.ALLOWED_TOOLS;
 // Set MASTER_STYLE_PROMPT in .env to enforce a unified art direction across all generated assets.
 // Example: "All assets for a cyberpunk pixel-art roguelike: neon cyan #00FFFF, magenta #FF00FF, consistent lighting from top-left"
 const masterStylePrompt = process.env.MASTER_STYLE_PROMPT ?? '';
-const prototypeMode = (process.env.PROTOTYPE_MODE === 'true') || (process.env.PROTOTYPING === 'true');
 
 // Runtime cache of available PPQ.ai models (populated at startup)
 const availableModels: { images: string[]; videos: string[]; all: string[] } = { images: [], videos: [], all: [] };
@@ -110,29 +109,26 @@ function selectModelForTool(toolKey: 'image' | 'pixel_art' | 'texture' | 'charac
   };
 
   if (toolKey === 'video') {
-    if (prototypeMode) return prefer(['xai/grok-imagine-video', 'kling-2.5-turbo', 'veo3']);
-    return prefer(['fal-ai/veo3.1', 'veo3', 'kling-2.5-turbo']) || 'kling-2.5-turbo';
+    return prefer(['fal-ai/veo3.1', 'veo3', 'kling-2.5-turbo', 'xai/grok-imagine-video']) || 'kling-2.5-turbo';
   }
 
   if (toolKey === 'character_sheet' || toolKey === 'object_sheet') {
-    if (prototypeMode) return prefer(['fal-ai/bytedance/seedream/v4.5/text-to-image', 'flux-kontext-max', 'flux-kontext-pro']) || 'flux-kontext-max';
-    return prefer(['flux-kontext-max', 'fal-ai/bytedance/seedream/v4.5/text-to-image', 'gpt-image-1']) || 'flux-kontext-max';
+    return prefer(['gpt-image-1.5']) || 'gpt-image-1.5';
   }
 
   // pixel art / general images / textures
   if (toolKey === 'pixel_art' || toolKey === 'image' || toolKey === 'texture') {
-    if (prototypeMode) return prefer(['xai/grok-imagine', 'flux-2-pro', 'gpt-image-1', 'nano-banana-pro']) || 'flux-2-pro';
-    return prefer(['flux-2-pro', 'flux-kontext-max', 'gpt-image-1', 'nano-banana-pro']) || 'flux-kontext-max';
+    return prefer(['gpt-image-1.5']) || 'gpt-image-1.5';
   }
 
-  return 'nano-banana-pro';
+  return 'gpt-image-1.5';
 }
 
 // Define all available tools
 const allTools = [
   {
     name: 'ppqai_generate_image',
-    description: 'Generate images using PPQ.ai unified API. Supports many models: gpt-image-1 (high quality), nano-banana-pro (cheap Gemini 3 Pro), flux-2-pro/flex (fast), flux-kontext-pro/max (image-to-image). Pay-per-use pricing.',
+    description: 'Generate images from text prompts using PPQ.ai unified API. Text-to-image only. Currently enabled model: gpt-image-1.5. Pay-per-use pricing.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -146,12 +142,12 @@ const allTools = [
         },
         model: {
           type: 'string',
-          enum: ['gpt-image-1', 'gpt-image-1.5', 'nano-banana-pro', 'flux-2-pro', 'flux-2-flex', 'flux-2-pro-i2i', 'flux-kontext-pro', 'flux-kontext-max'],
-          description: 'Image model to use (default: nano-banana-pro). gpt-image-1: best quality. nano-banana-pro: cheapest. flux-kontext-pro/max: best for image-to-image.',
+          enum: ['gpt-image-1.5'],
+          description: 'Text-to-image model to use (default: gpt-image-1.5).',
         },
         quality: {
           type: 'string',
-          description: 'Quality tier (model-specific): gpt-image-1: low/medium/high, nano-banana-pro: standard/4k, flux-2-pro/flex: 1k/2k',
+          description: 'Quality tier (gpt-image-1.5): low/medium/high',
         },
         n: {
           type: 'number',
@@ -163,13 +159,43 @@ const allTools = [
           type: 'string',
           description: 'Image size/aspect ratio (e.g., "1:1", "16:9", "9:16", "1024x1024")',
         },
+      },
+      required: ['prompt', 'outputPath'],
+    },
+  },
+  {
+    name: 'ppqai-transform_image',
+    description: 'Temporarily disabled: image-to-image transform is currently unavailable.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prompt: {
+          type: 'string',
+          description: 'Transformation prompt describing how the source image should be edited.',
+        },
+        outputPath: {
+          type: 'string',
+          description: 'Path where the transformed image should be saved',
+        },
+        model: {
+          type: 'string',
+          description: 'Temporarily disabled. No i2i model currently enabled.',
+        },
+        quality: {
+          type: 'string',
+          description: 'Optional quality tier supported by the selected model/provider.',
+        },
+        size: {
+          type: 'string',
+          description: 'Output size/aspect ratio (e.g., "1:1", "16:9", "1024x1024")',
+        },
         image_url: {
           type: 'string',
-          description: 'Source image URL for image-to-image generation',
+          description: 'Source image URL for image-to-image transformation',
         },
         inputImagePath: {
           type: 'string',
-          description: 'Local path to source image for image-to-image (alternative to image_url)',
+          description: 'Local path to source image for image-to-image transformation',
         },
       },
       required: ['prompt', 'outputPath'],
@@ -224,7 +250,7 @@ const allTools = [
   },
   {
     name: 'ppqai_text_to_speech',
-    description: 'Convert text to speech using PPQ.ai TTS API with Deepgram Aura 2 voices. Returns an audio file.',
+    description: 'Convert text to speech using PPQ.ai TTS API. Only TTS models are allowed (music/STT/realtime voice models are excluded). Returns an audio file.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -235,6 +261,11 @@ const allTools = [
         outputPath: {
           type: 'string',
           description: 'Path where the audio file should be saved',
+        },
+        model: {
+          type: 'string',
+          enum: [...TTS_MODELS],
+          description: 'TTS model to use (default: deepgram_aura_2). Music/STT/realtime models are not allowed.',
         },
         voice: {
           type: 'string',
@@ -288,8 +319,8 @@ const allTools = [
         },
         model: {
           type: 'string',
-          enum: ['gpt-image-1', 'nano-banana-pro', 'flux-2-pro', 'flux-kontext-pro', 'flux-kontext-max'],
-          description: 'PPQ.ai model to use (default: flux-kontext-pro)',
+          enum: ['gpt-image-1.5'],
+          description: 'PPQ.ai model to use (default: gpt-image-1.5)',
         },
         style: {
           type: 'string',
@@ -305,34 +336,6 @@ const allTools = [
         },
       },
       required: ['characterDescription', 'outputPath'],
-    },
-  },
-  {
-    name: 'generate_character_variation',
-    description: 'Generate character variations by combining reference images (e.g., character + outfit) via PPQ.ai',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        prompt: {
-          type: 'string',
-          description: 'Description of the variation to create',
-        },
-        outputPath: {
-          type: 'string',
-          description: 'Path where the variation should be saved',
-        },
-        referenceImagePaths: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Array of reference image paths to combine',
-        },
-        model: {
-          type: 'string',
-          enum: ['gpt-image-1', 'nano-banana-pro', 'flux-kontext-pro', 'flux-kontext-max'],
-          description: 'PPQ.ai model to use (default: flux-kontext-pro)',
-        },
-      },
-      required: ['prompt', 'outputPath', 'referenceImagePaths'],
     },
   },
   {
@@ -360,8 +363,8 @@ const allTools = [
         },
         model: {
           type: 'string',
-          enum: ['gpt-image-1', 'nano-banana-pro', 'flux-2-pro'],
-          description: 'PPQ.ai model to use (default: nano-banana-pro)',
+          enum: ['gpt-image-1.5'],
+          description: 'PPQ.ai model to use (default: gpt-image-1.5)',
         },
         colors: {
           type: 'number',
@@ -407,8 +410,8 @@ const allTools = [
         },
         model: {
           type: 'string',
-          enum: ['gpt-image-1', 'nano-banana-pro', 'flux-2-pro'],
-          description: 'PPQ.ai model to use (default: nano-banana-pro)',
+          enum: ['gpt-image-1.5'],
+          description: 'PPQ.ai model to use (default: gpt-image-1.5)',
         },
         materialType: {
           type: 'string',
@@ -455,8 +458,8 @@ const allTools = [
         },
         model: {
           type: 'string',
-          enum: ['gpt-image-1', 'nano-banana-pro', 'flux-2-pro'],
-          description: 'PPQ.ai model to use (default: nano-banana-pro)',
+          enum: ['gpt-image-1.5'],
+          description: 'PPQ.ai model to use (default: gpt-image-1.5)',
         },
         style: {
           type: 'string',
@@ -568,17 +571,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     switch (name) {
       case 'ppqai_generate_image': {
         const enhancedArgs = { ...(args as any) };
+        if (enhancedArgs.image_url || enhancedArgs.inputImagePath) {
+          throw new Error('ppqai_generate_image supports text-to-image only. Use ppqai-transform_image for image-to-image edits.');
+        }
+        if (enhancedArgs.model && String(enhancedArgs.model) !== 'gpt-image-1.5') {
+          throw new Error('ppqai_generate_image accepts text-input models only. Use ppqai-transform_image for i2i models.');
+        }
         if (!enhancedArgs.model) enhancedArgs.model = selectModelForTool('image');
         if (enhancedArgs.prompt) enhancedArgs.prompt = buildGamePrompt('image', enhancedArgs.prompt, enhancedArgs.model);
-        // Default quality for gpt-image-1 depends on prototypeMode:
-        // - prototypeMode true => prefer lower-quality (faster, cheaper) => 'low'
-        // - prototypeMode false => prefer high-quality => 'high'
-        if (!enhancedArgs.quality && enhancedArgs.model && typeof enhancedArgs.model === 'string') {
-          const m = enhancedArgs.model.toLowerCase();
-          if (m.startsWith('gpt-image-1')) {
-            enhancedArgs.quality = prototypeMode ? 'low' : 'high';
-          }
-        }
         const result = await ppqaiGenerateImage(enhancedArgs);
         return {
           content: [
@@ -588,6 +588,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             },
           ],
         };
+      }
+
+      case 'ppqai-transform_image': {
+        throw new Error('ppqai-transform_image is temporarily disabled because no stable i2i model is currently enabled.');
       }
 
       case 'ppqai_generate_video': {
@@ -638,21 +642,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (!enhancedArgs.model) enhancedArgs.model = selectModelForTool('character_sheet');
         if (enhancedArgs.characterDescription) enhancedArgs.characterDescription = buildGamePrompt('character_sheet', enhancedArgs.characterDescription, enhancedArgs.model);
         const result = await generateCharacterSheet(enhancedArgs);
-        return {
-          content: [
-            {
-              type: 'text',
-              text: result,
-            },
-          ],
-        };
-      }
-
-      case 'generate_character_variation': {
-        const enhancedArgs = { ...(args as any) };
-        if (!enhancedArgs.model) enhancedArgs.model = selectModelForTool('character_sheet');
-        if (enhancedArgs.prompt) enhancedArgs.prompt = buildGamePrompt('character_sheet', enhancedArgs.prompt, enhancedArgs.model);
-        const result = await generateCharacterVariation(enhancedArgs);
         return {
           content: [
             {

@@ -1,23 +1,21 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  validate3DModelOptions,
+  generateReferenceImages,
   getDefault3DOptions,
   merge3DWithDefaults,
-  selectModelVariant,
-  generateReferenceImages,
+  Model3DFormat,
   type Model3DGenerationOptionsExtended,
   Model3DModel,
   Model3DVariant,
-  Model3DFormat,
-} from './providers/model3dHelpers.js';
+  selectModelVariant,
+  validate3DModelOptions,
+} from '../src/providers/model3dHelpers.js';
 
-// Mock the imageHelpers module
-vi.mock('./providers/imageHelpers.js', () => ({
+vi.mock('../src/providers/imageHelpers.js', () => ({
   generateImage: vi.fn(),
 }));
 
-// Mock the model3dUtils module
-vi.mock('./utils/model3dUtils.js', () => ({
+vi.mock('../src/utils/model3dUtils.js', () => ({
   trellisGenerate3DSingle: vi.fn(),
   trellisGenerate3DMulti: vi.fn(),
   hunyuan3DGenerateSingle: vi.fn(),
@@ -50,7 +48,7 @@ vi.mock('./utils/model3dUtils.js', () => ({
   },
 }));
 
-import { generateImage } from './providers/imageHelpers.js';
+import { generateImage } from '../src/providers/imageHelpers.js';
 const mockGenerateImage = vi.mocked(generateImage);
 
 describe('3D Model Helpers', () => {
@@ -158,20 +156,20 @@ describe('3D Model Helpers', () => {
       const userOptions: Model3DGenerationOptionsExtended = {
         outputPath: 'model.glb',
         model: Model3DModel.TRELLIS,
-        variant: Model3DVariant.SINGLE, // Override default
+        variant: Model3DVariant.SINGLE,
         prompt: 'test model',
       };
 
       const merged = merge3DWithDefaults(userOptions);
 
       expect(merged).toEqual({
-        format: Model3DFormat.GLB, // Default
-        autoGenerateReferences: true, // Default
-        referenceModel: 'gemini', // Default
-        referenceViews: ['front', 'back', 'top'], // Default
-        cleanupReferences: true, // Default
+        format: Model3DFormat.GLB,
+        autoGenerateReferences: true,
+        referenceModel: 'gemini',
+        referenceViews: ['front', 'back', 'top'],
+        cleanupReferences: true,
         model: Model3DModel.TRELLIS,
-        variant: Model3DVariant.SINGLE, // User option
+        variant: Model3DVariant.SINGLE,
         outputPath: 'model.glb',
         prompt: 'test model',
       });
@@ -181,14 +179,14 @@ describe('3D Model Helpers', () => {
       const userOptions: Model3DGenerationOptionsExtended = {
         outputPath: 'model.glb',
         model: Model3DModel.HUNYUAN3D,
-        referenceViews: ['front', 'left'], // User-specific option
+        referenceViews: ['front', 'left'],
         prompt: 'test model',
       };
 
       const merged = merge3DWithDefaults(userOptions);
 
-      expect(merged.referenceViews).toEqual(['front', 'left']); // User option preserved
-      expect(merged.variant).toBe(Model3DVariant.MULTI); // Default applied
+      expect(merged.referenceViews).toEqual(['front', 'left']);
+      expect(merged.variant).toBe(Model3DVariant.MULTI);
     });
   });
 
@@ -226,7 +224,6 @@ describe('3D Model Helpers', () => {
 
   describe('generateReferenceImages', () => {
     it('should generate reference images for specified views', async () => {
-      // Mock each call to return a single image path
       mockGenerateImage
         .mockResolvedValueOnce(JSON.stringify({ savedPaths: ['test_front.png'] }))
         .mockResolvedValueOnce(JSON.stringify({ savedPaths: ['test_back.png'] }))
@@ -253,7 +250,7 @@ describe('3D Model Helpers', () => {
       const result = await generateReferenceImages(
         'test object',
         'test_object.png',
-        ['front'], // Single view
+        ['front'],
         'gemini'
       );
 
@@ -274,7 +271,6 @@ describe('3D Model Helpers', () => {
         'gemini'
       );
 
-      // Should return successful generations even if one fails
       expect(result).toEqual(['test_front.png', 'test_top.png']);
       expect(result).not.toContain('test_back.png');
     });
@@ -291,7 +287,7 @@ describe('3D Model Helpers', () => {
 
       expect(mockGenerateImage).toHaveBeenCalledWith(expect.objectContaining({
         provider: 'openai',
-        size: '1024x1024'
+        size: '1024x1024',
       }));
     });
   });

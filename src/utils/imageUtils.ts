@@ -8,6 +8,27 @@ config({ path: path.resolve(process.cwd(), ".env") });
 
 // Use native fetch when available, otherwise dynamically import `node-fetch` when required.
 
+const parsePositiveIntEnv = (name: string, fallback: number): number => {
+  const value = Number(process.env[name]);
+  if (!Number.isFinite(value) || value <= 0) {
+    return fallback;
+  }
+  return Math.floor(value);
+};
+
+const sleep = async (ms: number): Promise<void> => {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+};
+
+const isRetryableNetworkError = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message : String(error);
+  return /fetch failed|connect timeout|UND_ERR_CONNECT_TIMEOUT|ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN|aborted/i.test(message);
+};
+
+const HTTP_TIMEOUT_MS = parsePositiveIntEnv('PPQ_HTTP_TIMEOUT_MS', 180000);
+const HTTP_RETRIES = parsePositiveIntEnv('PPQ_HTTP_RETRIES', 2);
+const HTTP_RETRY_DELAY_MS = parsePositiveIntEnv('PPQ_HTTP_RETRY_DELAY_MS', 2000);
+
 // Environment variable getters
 export const getPPQAIKey = (): string => {
   const key = process.env.PPQ_API_KEY;
@@ -44,25 +65,51 @@ export const makeHTTPRequest = async (
     }
   }
 
-  const options: any = { method, headers: { ...headers } };
-  if (body && method !== 'GET') {
-    options.body = JSON.stringify(body);
-    if (!options.headers['Content-Type'] && !options.headers['content-type']) {
-      options.headers['Content-Type'] = 'application/json';
+  for (let attempt = 0; attempt <= HTTP_RETRIES; attempt++) {
+    const options: any = { method, headers: { ...headers } };
+    if (body && method !== 'GET') {
+      options.body = JSON.stringify(body);
+      if (!options.headers['Content-Type'] && !options.headers['content-type']) {
+        options.headers['Content-Type'] = 'application/json';
+      }
+    }
+
+    const controller = new AbortController();
+    const timeoutHandle = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
+    options.signal = controller.signal;
+
+    try {
+      const res = await fetchFn(url, options);
+      const text = await res.text();
+      let parsed: any = text;
+      try {
+        parsed = JSON.parse(text);
+      } catch (parseError) {
+        void parseError;
+      }
+
+      if (!res.ok) {
+        if (res.status >= 500 && attempt < HTTP_RETRIES) {
+          await sleep(HTTP_RETRY_DELAY_MS * (attempt + 1));
+          continue;
+        }
+        const bodyMsg = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
+        throw new Error(`HTTP ${res.status} ${res.statusText}: ${bodyMsg}`);
+      }
+
+      return parsed;
+    } catch (error) {
+      if (attempt < HTTP_RETRIES && isRetryableNetworkError(error)) {
+        await sleep(HTTP_RETRY_DELAY_MS * (attempt + 1));
+        continue;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutHandle);
     }
   }
 
-  const res = await fetchFn(url, options);
-  const text = await res.text();
-  let parsed: any = text;
-  try { parsed = JSON.parse(text); } catch { /* keep raw text */ }
-
-  if (!res.ok) {
-    const bodyMsg = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
-    throw new Error(`HTTP ${res.status} ${res.statusText}: ${bodyMsg}`);
-  }
-
-  return parsed;
+  throw new Error(`HTTP request failed after ${HTTP_RETRIES + 1} attempts`);
 };
 
 // File operation helpers

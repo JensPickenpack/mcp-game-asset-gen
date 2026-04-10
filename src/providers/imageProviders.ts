@@ -17,7 +17,7 @@ export {
 export const ppqaiGenerateImage = async (args: {
   prompt: string;
   outputPath: string;
-  model?: "gpt-image-1" | "gpt-image-1.5" | "nano-banana-pro" | "flux-2-pro" | "flux-2-flex" | "flux-2-pro-i2i" | "flux-kontext-pro" | "flux-kontext-max";
+  model?: "gpt-image-1.5";
   quality?: string;
   n?: number;
   size?: string;
@@ -33,11 +33,8 @@ export const ppqaiGenerateImage = async (args: {
     imageUrl = `data:image/png;base64,${imageBase64}`;
   }
 
-  // Auto-select i2i model if image input is provided and no model specified
-  let model = args.model || "nano-banana-pro";
-  if (imageUrl && !args.model) {
-    model = "flux-kontext-pro";
-  }
+  // Use gpt-image-1.5 as the only currently enabled image model.
+  let model = args.model || "gpt-image-1.5";
 
   const body: any = {
     model: model,
@@ -110,6 +107,19 @@ export const ppqaiGenerateImage = async (args: {
   });
 };
 
+// PPQ.ai Image-to-Image transformation (dedicated tool)
+export const ppqaiTransformImage = async (args: {
+  prompt: string;
+  outputPath: string;
+  model?: string;
+  quality?: string;
+  size?: string;
+  image_url?: string;
+  inputImagePath?: string;
+}): Promise<string> => {
+  throw new Error('ppqai-transform_image is temporarily disabled because no stable i2i model is currently enabled.');
+};
+
 // Character Sheet Generation Tool
 export const generateCharacterSheet = async (args: {
   characterDescription: string;
@@ -148,7 +158,7 @@ export const generateCharacterSheet = async (args: {
       prompt,
       outputPath: args.outputPath,
       inputImagePaths: args.referenceImagePaths,
-      model: args.model || 'flux-kontext-pro',
+      model: args.model || 'gpt-image-1.5',
     });
 
     const parsedResult = JSON.parse(result);
@@ -193,7 +203,7 @@ export const generateCharacterVariation = async (args: {
       prompt,
       outputPath: args.outputPath,
       inputImagePaths: args.referenceImagePaths,
-      model: args.model || 'flux-kontext-pro',
+      model: args.model || 'gpt-image-1.5',
     });
 
     const parsedResult = JSON.parse(result);
@@ -255,7 +265,7 @@ export const generatePixelArtCharacter = async (args: {
     const result = await generateImage({
       prompt,
       outputPath: tempPath,
-      model: args.model || 'nano-banana-pro',
+      model: args.model || 'gpt-image-1.5',
       transparentBackground: args.transparentBackground,
       backgroundColor: args.backgroundColor,
       transparencyTolerance: 20,
@@ -349,7 +359,7 @@ export const generateTexture = async (args: {
     const result = await generateImage({
       prompt,
       outputPath: args.outputPath,
-      model: args.model || 'nano-banana-pro',
+      model: args.model || 'gpt-image-1.5',
       transparentBackground: args.transparentBackground,
       backgroundColor: args.backgroundColor,
       transparencyTolerance: args.transparencyTolerance,
@@ -432,7 +442,7 @@ export const generateObjectSheet = async (args: {
       const result = await generateImage({
         prompt,
         outputPath,
-        model: args.model || 'nano-banana-pro',
+        model: args.model || 'gpt-image-1.5',
       });
 
       const parsedResult = JSON.parse(result);

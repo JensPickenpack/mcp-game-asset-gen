@@ -5,7 +5,7 @@ import typescriptParser from '@typescript-eslint/parser';
 export default [
   js.configs.recommended,
   {
-    files: ['src/**/*.ts'],
+    files: ['src/**/*.ts', 'tests/**/*.ts'],
     languageOptions: {
       parser: typescriptParser,
       parserOptions: {
@@ -34,7 +34,7 @@ export default [
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
       '@typescript-eslint/no-non-null-assertion': 'off',
-      
+
       // General rules
       'no-console': 'off', // Allow console for server logging
       'no-undef': 'off', // Turn off since we define globals above

@@ -58,7 +58,7 @@ export const generateImage = async (options: ImageGenerationOptions): Promise<st
   return await ppqaiGenerateImage({
     prompt: options.prompt,
     outputPath: options.outputPath,
-    model: (options.model as any) || 'nano-banana-pro',
+    model: (options.model as any) || 'gpt-image-1.5',
     quality: options.quality,
     n: options.n,
     size: options.size,
@@ -114,7 +114,7 @@ export const generateImageComparison = async (
     models?: string[];
   }
 ): Promise<string> => {
-  const { models = ['nano-banana-pro', 'flux-2-pro'], outputPath, ...baseOptions } = options;
+  const { models = ['gpt-image-1.5'], outputPath, ...baseOptions } = options;
   const savedPaths: string[] = [];
   const results: any[] = [];
 
@@ -173,7 +173,7 @@ export const validateImageOptions = (options: ImageGenerationOptions): void => {
 // Helper function to get default options
 export const getDefaultOptions = (): Partial<ImageGenerationOptions> => {
   return {
-    model: 'nano-banana-pro',
+    model: 'gpt-image-1.5',
     n: 1,
   };
 };

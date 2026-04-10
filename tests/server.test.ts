@@ -1,7 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Mock the utils module before importing
-vi.mock('./utils/imageUtils.js', () => ({
+vi.mock('../src/utils/imageUtils.js', () => ({
   getOpenAIKey: vi.fn(),
   getGeminiKey: vi.fn(),
   getFalAIKey: vi.fn(),
@@ -11,7 +10,7 @@ vi.mock('./utils/imageUtils.js', () => ({
   saveBase64Image: vi.fn(),
 }));
 
-vi.mock('./providers/imageProviders.js', () => ({
+vi.mock('../src/providers/imageProviders.js', () => ({
   generateWithProvider: vi.fn(),
   generateCharacterSheet: vi.fn(),
   generateCharacterVariation: vi.fn(),
@@ -21,14 +20,14 @@ vi.mock('./providers/imageProviders.js', () => ({
 }));
 
 import {
-  getOpenAIKey,
-  getGeminiKey,
-  getFalAIKey,
-} from './utils/imageUtils.js';
-import {
-  generateWithProvider,
   generateCharacterVariation,
-} from './providers/imageProviders.js';
+  generateWithProvider,
+} from '../src/providers/imageProviders.js';
+import {
+  getFalAIKey,
+  getGeminiKey,
+  getOpenAIKey,
+} from '../src/utils/imageUtils.js';
 
 describe('Image Utils', () => {
   beforeEach(() => {
@@ -109,7 +108,6 @@ describe('MCP Asset Generation Server', () => {
   });
 
   it('should validate environment variables are required', () => {
-    // Test that the functions are properly exported and can be called
     expect(typeof getOpenAIKey).toBe('function');
     expect(typeof getGeminiKey).toBe('function');
     expect(typeof getFalAIKey).toBe('function');
@@ -126,20 +124,17 @@ describe('ALLOWED_TOOLS Environment Variable', () => {
 
   it('should return all tools when ALLOWED_TOOLS is not set', async () => {
     delete process.env.ALLOWED_TOOLS;
-    
-    // Import the server module fresh to test the environment variable
-    const { allTools } = await import('./index.js');
-    
-    // Should return all 10 tools (9 original + async 3D tool)
+
+    const { allTools } = await import('../src/index.js');
+
     expect(allTools).toHaveLength(10);
-    
+
     const toolNames = allTools.map(tool => tool.name);
     expect(toolNames).toContain('openai_generate_image');
     expect(toolNames).toContain('gemini_generate_image');
     expect(toolNames).toContain('falai_generate_image');
     expect(toolNames).toContain('falai_edit_image');
     expect(toolNames).toContain('generate_character_sheet');
-    expect(toolNames).toContain('generate_character_variation');
     expect(toolNames).toContain('generate_pixel_art_character');
     expect(toolNames).toContain('generate_texture');
     expect(toolNames).toContain('generate_object_sheet');
@@ -148,75 +143,72 @@ describe('ALLOWED_TOOLS Environment Variable', () => {
 
   it('should filter tools when ALLOWED_TOOLS is set', async () => {
     process.env.ALLOWED_TOOLS = 'openai_generate_image,gemini_generate_image';
-    
-    // Import the server module fresh to test the environment variable
-    const { allTools } = await import('./index.js');
-    
-    // The allTools array should still contain all tools, but the filtering happens in ListToolsRequestSchema
+
+    const { allTools } = await import('../src/index.js');
+
     expect(allTools).toHaveLength(10);
-    
-    // Test that filtering logic works correctly
-    const allowedToolNames = process.env.ALLOWED_TOOLS.split(",").map((t) => t.trim());
+
+    const allowedToolNames = process.env.ALLOWED_TOOLS.split(',').map((t) => t.trim());
     const filteredTools = allTools.filter((tool) => allowedToolNames.includes(tool.name));
-    
+
     expect(filteredTools).toHaveLength(2);
     expect(filteredTools.map(t => t.name)).toEqual(['openai_generate_image', 'gemini_generate_image']);
   });
 
   it('should handle single tool in ALLOWED_TOOLS', async () => {
     process.env.ALLOWED_TOOLS = 'generate_texture';
-    
-    const { allTools } = await import('./index.js');
-    
-    const allowedToolNames = process.env.ALLOWED_TOOLS.split(",").map((t) => t.trim());
+
+    const { allTools } = await import('../src/index.js');
+
+    const allowedToolNames = process.env.ALLOWED_TOOLS.split(',').map((t) => t.trim());
     const filteredTools = allTools.filter((tool) => allowedToolNames.includes(tool.name));
-    
+
     expect(filteredTools).toHaveLength(1);
     expect(filteredTools[0].name).toBe('generate_texture');
   });
 
   it('should handle empty ALLOWED_TOOLS', async () => {
     process.env.ALLOWED_TOOLS = '';
-    
-    const { allTools } = await import('./index.js');
-    
-    const allowedToolNames = process.env.ALLOWED_TOOLS.split(",").map((t) => t.trim());
+
+    const { allTools } = await import('../src/index.js');
+
+    const allowedToolNames = process.env.ALLOWED_TOOLS.split(',').map((t) => t.trim());
     const filteredTools = allTools.filter((tool) => allowedToolNames.includes(tool.name));
-    
+
     expect(filteredTools).toHaveLength(0);
   });
 
   it('should handle whitespace in ALLOWED_TOOLS', async () => {
     process.env.ALLOWED_TOOLS = ' openai_generate_image , gemini_generate_image , falai_generate_image ';
-    
-    const { allTools } = await import('./index.js');
-    
-    const allowedToolNames = process.env.ALLOWED_TOOLS.split(",").map((t) => t.trim());
+
+    const { allTools } = await import('../src/index.js');
+
+    const allowedToolNames = process.env.ALLOWED_TOOLS.split(',').map((t) => t.trim());
     const filteredTools = allTools.filter((tool) => allowedToolNames.includes(tool.name));
-    
+
     expect(filteredTools).toHaveLength(3);
     expect(filteredTools.map(t => t.name)).toEqual([
-      'openai_generate_image', 
-      'gemini_generate_image', 
-      'falai_generate_image'
+      'openai_generate_image',
+      'gemini_generate_image',
+      'falai_generate_image',
     ]);
   });
 
   it('should ignore unknown tools in ALLOWED_TOOLS', async () => {
     process.env.ALLOWED_TOOLS = 'openai_generate_image,unknown_tool,generate_texture';
-    
-    const { allTools } = await import('./index.js');
-    
-    const allowedToolNames = process.env.ALLOWED_TOOLS.split(",").map((t) => t.trim());
+
+    const { allTools } = await import('../src/index.js');
+
+    const allowedToolNames = process.env.ALLOWED_TOOLS.split(',').map((t) => t.trim());
     const filteredTools = allTools.filter((tool) => allowedToolNames.includes(tool.name));
-    
+
     expect(filteredTools).toHaveLength(2);
     expect(filteredTools.map(t => t.name)).toEqual(['openai_generate_image', 'generate_texture']);
   });
 
   it('should validate tool schemas are complete', async () => {
-    const { allTools } = await import('./index.js');
-    
+    const { allTools } = await import('../src/index.js');
+
     allTools.forEach(tool => {
       expect(tool).toHaveProperty('name');
       expect(tool).toHaveProperty('description');
@@ -224,8 +216,7 @@ describe('ALLOWED_TOOLS Environment Variable', () => {
       expect(tool.inputSchema).toHaveProperty('type');
       expect(tool.inputSchema).toHaveProperty('properties');
       expect(tool.inputSchema).toHaveProperty('required');
-      
-      // Validate that required properties are actually in the properties
+
       tool.inputSchema.required?.forEach((requiredProp: string) => {
         expect(tool.inputSchema.properties).toHaveProperty(requiredProp);
       });
