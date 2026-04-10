@@ -67,7 +67,7 @@ async function fetchPPQModels() {
     availableModels.all = Array.from(new Set([...availableModels.images, ...availableModels.videos]));
 
     try {
-      const cachePath = path.join(process.cwd(), 'tools', 'game-asset-mcp', 'ppq_models_cache.json');
+      const cachePath = path.join(process.cwd(), 'ppq_models_cache.json');
       writeFileSync(cachePath, JSON.stringify(availableModels, null, 2));
     } catch (err) {
       console.warn('Failed to write PPQ.ai models cache:', err instanceof Error ? err.message : String(err));
@@ -95,6 +95,41 @@ function buildGamePrompt(toolType: keyof typeof TOOL_PROMPT_PREFIX, userPrompt: 
   parts.push(TOOL_PROMPT_PREFIX[toolType] ?? TOOL_PROMPT_PREFIX.general);
   if (userPrompt) parts.push(userPrompt);
   return parts.join(' | ');
+}
+
+const workspaceRoot = path.resolve(process.cwd(), '..', '..');
+const defaultAssetOutputRoot = process.env.GAME_ASSET_OUTPUT_ROOT
+  ? path.resolve(process.env.GAME_ASSET_OUTPUT_ROOT)
+  : path.join(workspaceRoot, 'assets', 'generated');
+
+function normalizeOutputPath(rawPath: string): string {
+  if (!rawPath) return rawPath;
+  if (path.isAbsolute(rawPath)) return rawPath;
+
+  const normalized = rawPath.replace(/^[.][\\/]/, '');
+  if (normalized.startsWith('assets/') || normalized.startsWith('assets\\')) {
+    return path.resolve(workspaceRoot, normalized);
+  }
+
+  return path.resolve(defaultAssetOutputRoot, normalized);
+}
+
+function normalizePathArgs<T extends { outputPath?: string; outputBasePath?: string; statusFile?: string }>(input: T): T {
+  const args = { ...input };
+
+  if (typeof args.outputPath === 'string') {
+    args.outputPath = normalizeOutputPath(args.outputPath);
+  }
+
+  if (typeof args.outputBasePath === 'string') {
+    args.outputBasePath = normalizeOutputPath(args.outputBasePath);
+  }
+
+  if (typeof args.statusFile === 'string') {
+    args.statusFile = normalizeOutputPath(args.statusFile);
+  }
+
+  return args;
 }
 
 function selectModelForTool(toolKey: 'image' | 'pixel_art' | 'texture' | 'character_sheet' | 'video' | 'object_sheet') {
@@ -570,7 +605,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case 'ppqai_generate_image': {
-        const enhancedArgs = { ...(args as any) };
+        const enhancedArgs = normalizePathArgs({ ...(args as any) });
         if (enhancedArgs.image_url || enhancedArgs.inputImagePath) {
           throw new Error('ppqai_generate_image supports text-to-image only. Use ppqai-transform_image for image-to-image edits.');
         }
@@ -596,7 +631,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'ppqai_generate_video': {
         if (!args) throw new Error('Arguments are required for ppqai_generate_video');
-        const enhancedArgs = { ...(args as any) };
+        const enhancedArgs = normalizePathArgs({ ...(args as any) });
         if (!enhancedArgs.model) enhancedArgs.model = selectModelForTool('video');
         if (enhancedArgs.prompt) enhancedArgs.prompt = buildGamePrompt('video', enhancedArgs.prompt, enhancedArgs.model);
         const statusFile = enhancedArgs.statusFile || enhancedArgs.outputPath.replace(/\.[^.]+$/, '_status.json');
@@ -613,7 +648,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'ppqai_text_to_speech': {
         if (!args) throw new Error('Arguments are required for ppqai_text_to_speech');
-        const result = await ppqaiTextToSpeech(args as any);
+        const enhancedArgs = normalizePathArgs({ ...(args as any) });
+        const result = await ppqaiTextToSpeech(enhancedArgs);
         return {
           content: [
             {
@@ -638,7 +674,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'generate_character_sheet': {
-        const enhancedArgs = { ...(args as any) };
+        const enhancedArgs = normalizePathArgs({ ...(args as any) });
         if (!enhancedArgs.model) enhancedArgs.model = selectModelForTool('character_sheet');
         if (enhancedArgs.characterDescription) enhancedArgs.characterDescription = buildGamePrompt('character_sheet', enhancedArgs.characterDescription, enhancedArgs.model);
         const result = await generateCharacterSheet(enhancedArgs);
@@ -653,7 +689,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'generate_pixel_art_character': {
-        const enhancedArgs = { ...(args as any) };
+        const enhancedArgs = normalizePathArgs({ ...(args as any) });
         if (!enhancedArgs.model) enhancedArgs.model = selectModelForTool('pixel_art');
         if (enhancedArgs.characterDescription) enhancedArgs.characterDescription = buildGamePrompt('pixel_art', enhancedArgs.characterDescription, enhancedArgs.model);
         const result = await generatePixelArtCharacter(enhancedArgs);
@@ -668,7 +704,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'generate_texture': {
-        const enhancedArgs = { ...(args as any) };
+        const enhancedArgs = normalizePathArgs({ ...(args as any) });
         if (!enhancedArgs.model) enhancedArgs.model = selectModelForTool('texture');
         if (enhancedArgs.textureDescription) enhancedArgs.textureDescription = buildGamePrompt('texture', enhancedArgs.textureDescription, enhancedArgs.model);
         const result = await generateTexture(enhancedArgs);
@@ -683,7 +719,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'generate_object_sheet': {
-        const enhancedArgs = { ...(args as any) };
+        const enhancedArgs = normalizePathArgs({ ...(args as any) });
         if (!enhancedArgs.model) enhancedArgs.model = selectModelForTool('object_sheet');
         if (enhancedArgs.objectDescription) enhancedArgs.objectDescription = buildGamePrompt('reference_3d', enhancedArgs.objectDescription, enhancedArgs.model);
         const result = await generateObjectSheet(enhancedArgs);
@@ -705,30 +741,31 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (!args) {
           throw new Error('Arguments are required for image_to_3d_async');
         }
-        if (!args.outputPath) {
+        const enhancedArgs = normalizePathArgs({ ...(args as any) });
+        if (!enhancedArgs.outputPath) {
           throw new Error('outputPath is required for image_to_3d_async');
         }
 
         // Generate status file path
-        const statusFile = (args as any).statusFile ||
-          (args as any).outputPath.replace(/\.[^.]+$/, '_status.json');
+        const statusFile = enhancedArgs.statusFile ||
+          enhancedArgs.outputPath.replace(/\.[^.]+$/, '_status.json');
 
         // Use hunyuan3d as default model for best quality
-        const selectedModel = (args as any).model || 'hunyuan3d';
+        const selectedModel = enhancedArgs.model || 'hunyuan3d';
 
         const result = await generate3DModelAsync(
           {
-            prompt: buildGamePrompt('reference_3d', (args as any).prompt || '', selectedModel),
-            outputPath: (args as any).outputPath,
+            prompt: buildGamePrompt('reference_3d', enhancedArgs.prompt || '', selectedModel),
+            outputPath: enhancedArgs.outputPath,
             model: selectedModel,
-            inputImagePaths: (args as any).inputImagePaths || [],
-            variant: (args as any).variant,
-            format: (args as any).format,
-            textured_mesh: (args as any).textured_mesh,
-            autoGenerateReferences: (args as any).autoGenerateReferences,
-            referenceModel: (args as any).referenceModel,
-            referenceViews: (args as any).referenceViews,
-            cleanupReferences: (args as any).cleanupReferences,
+            inputImagePaths: enhancedArgs.inputImagePaths || [],
+            variant: enhancedArgs.variant,
+            format: enhancedArgs.format,
+            textured_mesh: enhancedArgs.textured_mesh,
+            autoGenerateReferences: enhancedArgs.autoGenerateReferences,
+            referenceModel: enhancedArgs.referenceModel,
+            referenceViews: enhancedArgs.referenceViews,
+            cleanupReferences: enhancedArgs.cleanupReferences,
           },
           statusFile
         );
