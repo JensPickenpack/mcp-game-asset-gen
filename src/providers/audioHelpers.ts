@@ -15,14 +15,49 @@ export const TTS_MODELS = [
 
 export type TTSModel = typeof TTS_MODELS[number];
 
-// TTS voices available
+// TTS voices available — Deepgram Aura 2 (see https://developers.deepgram.com/docs/tts-models)
+// Languages: en (English), de (German), fr (French), es (Spanish), nl (Dutch),
+//            it (Italian), ja (Japanese)
 export const TTS_VOICES = [
-    'aura-2-arcas-en',
+    // English (featured + extras)
     'aura-2-thalia-en',
     'aura-2-andromeda-en',
     'aura-2-helena-en',
     'aura-2-apollo-en',
+    'aura-2-arcas-en',
     'aura-2-aries-en',
+    'aura-2-athena-en',
+    'aura-2-atlas-en',
+    'aura-2-draco-en',
+    'aura-2-hermes-en',
+    'aura-2-orpheus-en',
+    'aura-2-zeus-en',
+    // German (de-de)
+    'aura-2-julius-de',
+    'aura-2-viktoria-de',
+    'aura-2-elara-de',
+    'aura-2-aurelia-de',
+    'aura-2-lara-de',
+    'aura-2-fabian-de',
+    'aura-2-kara-de',
+    // French (fr-fr)
+    'aura-2-agathe-fr',
+    'aura-2-hector-fr',
+    // Spanish
+    'aura-2-celeste-es',
+    'aura-2-estrella-es',
+    'aura-2-nestor-es',
+    'aura-2-sirio-es',
+    // Dutch (nl-nl)
+    'aura-2-rhea-nl',
+    'aura-2-sander-nl',
+    'aura-2-beatrix-nl',
+    // Italian (it-it)
+    'aura-2-livia-it',
+    'aura-2-dionisio-it',
+    // Japanese (ja-jp)
+    'aura-2-fujin-ja',
+    'aura-2-izanami-ja',
 ] as const;
 
 export type TTSVoice = typeof TTS_VOICES[number];
